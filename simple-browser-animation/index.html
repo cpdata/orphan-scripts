@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cartoon Animation System - Frog Crossing</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <style>
+        /* Basic styling for the page */
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+
+        /* Styling for the main animation stage */
+        #cartoon-stage {
+            position: relative; /* Establishes positioning context */
+            overflow: hidden;   /* Clips elements outside the stage */
+            width: 600px;
+            height: 400px;
+            border: 2px solid black;
+            background-color: #e0e0e0; /* Default background */
+            margin-bottom: 15px;
+        }
+
+        /* Default styles for elements added by the system */
+        #cartoon-stage > div {
+            position: absolute; /* All elements are absolutely positioned */
+            box-sizing: border-box; /* Include padding/border in element's total width/height */
+        }
+
+        /* Simple button styling */
+        .controls button {
+            padding: 8px 15px;
+            margin: 0 5px;
+            cursor: pointer;
+            border-radius: 5px;
+            border: 1px solid #555;
+            background-color: #ddd;
+        }
+        .controls button:hover {
+            background-color: #ccc;
+        }
+        .controls button:active {
+            background-color: #bbb;
+        }
+
+        /* Accessibility toggle styling */
+        .a11y-toggle {
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+         .a11y-toggle label {
+             cursor: pointer;
+         }
+
+    </style>
+</head>
+<body>
+
+    <h1>2D Cartoon Animation System</h1>
+
+    <div id="cartoon-stage">
+        </div>
+
+    <div class="controls">
+        <button id="playBtn">Play</button>
+        <button id="pauseBtn">Pause</button>
+        <button id="restartBtn">Restart</button>
+    </div>
+
+     <div class="a11y-toggle">
+        <input type="checkbox" id="motionToggle">
+        <label for="motionToggle">Reduce Motion</label>
+    </div>
+
+    <script>
+        /**
+         * CartoonSystem Object
+         * Encapsulates the logic for managing and animating elements on the stage.
+         */
+        const CartoonSystem = {
+            stageElement: null, // Reference to the main stage div
+            timeline: null,     // Main GSAP timeline for the cartoon sequence
+            objects: {},        // Dictionary to store references/config of managed elements
+            gsapMatchMedia: null, // GSAP MatchMedia instance for accessibility
+
+            /**
+             * Initializes the animation system.
+             * @param {string} stageId - The ID of the HTML stage container element.
+             */
+            init(stageId) {
+                this.stageElement = document.getElementById(stageId);
+                if (!this.stageElement) {
+                    console.error(`CartoonSystem Error: Stage element with ID "${stageId}" not found.`);
+                    return false;
+                }
+
+                // Ensure stage has relative positioning if not set via CSS
+                if (window.getComputedStyle(this.stageElement).position === 'static') {
+                    this.stageElement.style.position = 'relative';
+                    console.warn(`CartoonSystem: Stage element #${stageId} had static positioning. Changed to relative.`);
+                }
+
+                // Clear previous objects and timeline if re-initializing
+                this.clearStage(); // Remove existing DOM elements
+                if (this.timeline) {
+                    this.timeline.kill(); // Kill existing timeline
+                }
+                 if (this.gsapMatchMedia) {
+                    this.gsapMatchMedia.kill(); // Kill existing matchMedia setup
+                }
+
+                // Initialize the main GSAP timeline, paused by default
+                this.timeline = gsap.timeline({ paused: true });
+                this.objects = {}; // Reset object store
+
+                // Initialize accessibility features
+                this.setupAccessibility();
+
+                console.log("CartoonSystem Initialized.");
+                return true;
+            },
+
+            /**
+             * Removes all dynamically added elements from the stage.
+             */
+            clearStage() {
+                if (this.stageElement) {
+                    // Remove children added by the system (assuming they are direct divs)
+                    const children = Array.from(this.stageElement.children);
+                    children.forEach(child => {
+                        // Check if it's likely managed by the system (has an ID in our store)
+                         // Or simply remove all direct div children if that's the convention
+                        if (child.tagName === 'DIV' && child.id && this.objects[child.id]) {
+                             this.stageElement.removeChild(child);
+                        } else if (child.tagName === 'DIV' && !child.classList.contains('system-persists')) {
+                            // Fallback: remove divs unless marked otherwise
+                            this.stageElement.removeChild(child);
+                        }
+                    });
+                }
+                 this.objects = {}; // Clear object references
+            },
+
+
+            /**
+             * Sets up GSAP MatchMedia for handling prefers-reduced-motion.
+             */
+            setupAccessibility() {
+                this.gsapMatchMedia = gsap.matchMedia();
+                const motionToggleCheckbox = document.getElementById('motionToggle');
+
+                this.gsapMatchMedia.add({
+                    // Define conditions
+                    isReduced: "(prefers-reduced-motion: reduce)",
+                    isNotReduced: "(prefers-reduced-motion: no-preference)"
+                }, (context) => {
+                    // context.conditions contains boolean flags for each condition
+                    let { isReduced } = context.conditions;
+
+                    // Allow UI toggle to override OS setting
+                    if (motionToggleCheckbox && motionToggleCheckbox.checked) {
+                        isReduced = true;
+                    }
+
+                    // Store the motion preference state for use in animation functions
+                    this.prefersReducedMotion = isReduced;
+
+                    console.log(`Accessibility Setup: Motion preference is ${isReduced ? 'REDUCED' : 'FULL'}`);
+
+                    // IMPORTANT: Actual animation adjustments based on `this.prefersReducedMotion`
+                    // need to happen within the functions that *create* the animations
+                    // (e.g., animateObject, animateSprite, or the createCartoon function itself).
+                    // This setup primarily establishes the state.
+
+                    // Return a cleanup function (optional)
+                    return () => {
+                        console.log("matchMedia context cleanup");
+                        // Reset state if needed
+                        this.prefersReducedMotion = false;
+                    };
+                });
+
+                 // Initialize checkbox based on current OS setting
+                 if (motionToggleCheckbox) {
+                    motionToggleCheckbox.checked = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+                    // Refresh matchMedia when the checkbox changes
+                    motionToggleCheckbox.addEventListener("change", () => {
+                        console.log("Motion toggle changed, refreshing matchMedia...");
+                        // Re-run the setup logic by refreshing matchMedia
+                        this.gsapMatchMedia.revert(); // Revert current state before refresh if needed
+                        // Note: GSAP's refresh might happen automatically, but explicit revert can be safer.
+                        // We might need to re-run createCartoon or similar logic after refresh.
+                        // For simplicity here, we'll just log and rely on future animations respecting the flag.
+                        // A more robust solution might involve rebuilding the timeline.
+                        alert("Motion preference changed. Please restart the animation to see the full effect.");
+                    });
+                 }
+            },
+
+            /**
+             * Adds a background or generic element to the stage.
+             * @param {object} config - Configuration object: { id, parentId?, zIndex, styles, imageUrl?, duration? }
+             * @returns {HTMLElement|null} The created DOM element or null on error.
+             */
+            addElement(config) {
+                if (!this.stageElement) {
+                    console.error("CartoonSystem Error: System not initialized.");
+                    return null;
+                }
+                if (!config || !config.id) {
+                    console.error("CartoonSystem Error: Element config must include an 'id'.", config);
+                    return null;
+                }
+                if (this.objects[config.id]) {
+                    console.warn(`CartoonSystem Warning: Element with ID "${config.id}" already exists. Overwriting.`);
+                    this.removeElement(config.id); // Remove existing before adding new
+                }
+
+                const parent = config.parentId ? document.getElementById(config.parentId) : this.stageElement;
+                if (!parent) {
+                    console.error(`CartoonSystem Error: Parent element with ID "${config.parentId}" not found.`);
+                    return null;
+                }
+
+                const element = document.createElement('div');
+                element.id = config.id;
+
+                // Apply mandatory styles
+                element.style.position = 'absolute';
+                element.style.zIndex = config.zIndex ?? 0; // Default zIndex to 0 if not provided
+
+                // Apply user-defined styles
+                if (config.styles && typeof config.styles === 'object') {
+                    Object.assign(element.style, config.styles);
+                }
+
+                // Apply background image if provided
+                if (config.imageUrl) {
+                    element.style.backgroundImage = `url(${config.imageUrl})`;
+                    element.style.backgroundSize = config.styles?.backgroundSize || 'cover'; // Default size
+                    element.style.backgroundRepeat = 'no-repeat';
+                }
+
+                // Append to parent
+                parent.appendChild(element);
+
+                // Store reference/config
+                this.objects[config.id] = { element: element, config: config };
+
+                // Schedule removal if duration is provided
+                if (config.duration && typeof config.duration === 'number' && config.duration > 0) {
+                    this.timeline.call(this.removeElement, [config.id], ">" + config.duration);
+                }
+
+                return element;
+            },
+
+            /**
+             * Removes an element from the stage and internal tracking.
+             * @param {string} id - The ID of the element to remove.
+             * @param {object} [options] - Optional parameters like { fadeDuration: 0.5 }
+             */
+            removeElement(id, options = {}) {
+                const objData = this.objects[id];
+                if (objData && objData.element) {
+                    const element = objData.element;
+                    const removeAction = () => {
+                        if (element.parentNode) {
+                            element.parentNode.removeChild(element);
+                        }
+                        delete this.objects[id];
+                        console.log(`Removed element: ${id}`);
+                    };
+
+                    if (options.fadeDuration && typeof options.fadeDuration === 'number' && options.fadeDuration > 0) {
+                        // Add fade out animation before removal
+                        gsap.to(element, {
+                            opacity: 0,
+                            duration: options.fadeDuration,
+                            onComplete: removeAction
+                        });
+                    } else {
+                        // Remove immediately
+                        removeAction();
+                    }
+                } else {
+                    console.warn(`CartoonSystem Warning: Element with ID "${id}" not found for removal.`);
+                }
+            },
+
+            // Alias functions for clarity based on Design Doc
+            addBackground(config) { return this.addElement(config); },
+            removeBackground(id, options) { this.removeElement(id, options); },
+            addObject(config) { return this.addElement(config); },
+            removeObject(id, options) { this.removeElement(id, options); },
+
+
+            /**
+             * Applies a GSAP animation (tween) to an object on the main timeline.
+             * Respects prefersReducedMotion flag.
+             * @param {string} id - The ID of the target element (or a CSS selector).
+             * @param {object} animationProps - A GSAP tween variables object.
+             * @param {string | number} [timelinePosition] - Position on the main timeline.
+             */
+            animateObject(id, animationProps, timelinePosition) {
+                if (!this.timeline) {
+                    console.error("CartoonSystem Error: Timeline not initialized.");
+                    return;
+                }
+
+                const target = this.objects[id] ? `#${id}` : id; // Allow targeting by ID or selector
+                const elementExists = this.objects[id] || document.querySelector(id);
+
+                if (!elementExists) {
+                     console.warn(`CartoonSystem Warning: Target "${id}" not found for animation.`);
+                     return;
+                }
+
+                // --- Accessibility Check ---
+                if (this.prefersReducedMotion) {
+                    console.log(`Reduced Motion: Skipping complex animation for ${id}. Applying end state if possible.`);
+                    // Option 1: Skip animation entirely
+                    // return;
+
+                    // Option 2: Apply a simpler animation (e.g., fade)
+                    const reducedProps = { duration: animationProps.duration || 0.5 }; // Keep duration or default
+                    if (animationProps.hasOwnProperty('opacity')) {
+                         reducedProps.opacity = animationProps.opacity;
+                    }
+                    // Add other simple properties if needed, like minimal movement
+                     if (animationProps.hasOwnProperty('x') || animationProps.hasOwnProperty('y')) {
+                         // Maybe apply a very small, quick move or just set the final position
+                         // For now, let's just use opacity if present, otherwise do nothing more.
+                     }
+
+                    if (Object.keys(reducedProps).length > 1) { // Only animate if there's more than just duration
+                        this.timeline.to(target, reducedProps, timelinePosition);
+                    } else {
+                         // Option 3: Set final state instantly (if easily determinable)
+                         // This is complex for relative values ('+=100').
+                         // For simplicity, we might just skip or do a quick fade.
+                         console.log(`Reduced Motion: No simple alternative animation defined for ${id}. Skipping.`);
+                    }
+
+                } else {
+                    // --- Full Motion ---
+                    this.timeline.to(target, animationProps, timelinePosition);
+                }
+            },
+
+            /**
+             * Creates a sprite animation sequence on the timeline using CSS background-position.
+             * Placeholder - Requires spriteSheet config on the object.
+             * @param {string} id - ID of the target element.
+             * @param {string} animationName - Key for the animation sequence.
+             * @param {string | number} [timelinePosition] - Position on the main timeline.
+             */
+            animateSprite(id, animationName, timelinePosition) {
+                console.warn("CartoonSystem: animateSprite is not fully implemented in this example.");
+                const objData = this.objects[id];
+                if (!objData || !objData.config?.spriteSheet || !objData.config.spriteSheet.animations[animationName]) {
+                    console.error(`CartoonSystem Error: Sprite config or animation "${animationName}" not found for ID "${id}".`);
+                    return;
+                }
+                 if (this.prefersReducedMotion) {
+                     console.log(`Reduced Motion: Skipping sprite animation for ${id}.`);
+                     // Optionally set to a static frame using setObjectSpriteFrame
+                     // this.setObjectSpriteFrame(id, animationName, 0); // Set to first frame
+                     return;
+                 }
+
+                // --- Full implementation would go here ---
+                // Retrieve frameWidth, frameHeight, frame count, fps from config
+                // Calculate total width/height of animation strip in the sprite sheet
+                // Calculate duration based on frame count and fps
+                // Create GSAP tween targeting backgroundPositionX/Y with steps() ease
+                // Example structure (needs actual values):
+                // const config = objData.config.spriteSheet;
+                // const animData = config.animations[animationName];
+                // const frameCount = animData.frames;
+                // const fps = animData.fps || 12;
+                // const duration = frameCount / fps;
+                // const frameWidth = config.frameWidth;
+                // const endValueX = -(frameCount * frameWidth); // Assuming horizontal strip
+                //
+                // this.timeline.to(`#${id}`, {
+                //     backgroundPositionX: endValueX,
+                //     duration: duration,
+                //     ease: `steps(${frameCount})` // GSAP might need frameCount or frameCount-1
+                // }, timelinePosition);
+            },
+
+            /**
+             * Instantly sets an object's sprite to a specific frame.
+             * Placeholder - Requires spriteSheet config on the object.
+             * @param {string} id - Target element ID.
+             * @param {string} animationName - Key from the sprite sheet config.
+             * @param {number} frameIndex - 0-based index of the desired frame.
+             */
+            setObjectSpriteFrame(id, animationName, frameIndex) {
+                 console.warn("CartoonSystem: setObjectSpriteFrame is not fully implemented in this example.");
+                const objData = this.objects[id];
+                 if (!objData || !objData.config?.spriteSheet) {
+                    console.error(`CartoonSystem Error: Sprite config not found for ID "${id}".`);
+                    return;
+                }
+                 // --- Full implementation would go here ---
+                 // Retrieve frameWidth, frameHeight from config
+                 // Calculate backgroundPositionX/Y based on frameIndex and sprite layout
+                 // Use gsap.set() to apply instantly
+                 // Example structure (needs actual values):
+                 // const config = objData.config.spriteSheet;
+                 // const frameWidth = config.frameWidth;
+                 // const frameHeight = config.frameHeight;
+                 // const columns = config.columns || frameCount; // Need layout info
+                 // const posX = -( (frameIndex % columns) * frameWidth );
+                 // const posY = -( Math.floor(frameIndex / columns) * frameHeight );
+                 //
+                 // gsap.set(`#${id}`, { backgroundPosition: `${posX}px ${posY}px` });
+
+            },
+
+
+            // --- Timeline Control Wrappers ---
+            play() { if (this.timeline) this.timeline.play(); },
+            pause() { if (this.timeline) this.timeline.pause(); },
+            seek(timeOrLabel) { if (this.timeline) this.timeline.seek(timeOrLabel); },
+            restart() {
+                 if (this.timeline) {
+                     // Option 1: Simple restart from beginning
+                     // this.timeline.restart();
+
+                     // Option 2: Re-create the cartoon (useful if state needs full reset)
+                     console.log("Restarting cartoon...");
+                     createCartoon(); // Call the function that builds the animation
+                     this.play(); // Auto-play on restart
+                 }
+            },
+            addLabel(labelName, timelinePosition) { if (this.timeline) this.timeline.addLabel(labelName, timelinePosition); },
+            addDelay(duration, timelinePosition) { if (this.timeline) this.timeline.to({}, { duration: duration }, timelinePosition); },
+            getTimeline() { return this.timeline; },
+
+        }; // End of CartoonSystem Object
+
+
+        /**
+         * Creates the Frog Crossing Traffic Cartoon Animation.
+         */
+        function createCartoon() {
+            // 1. Initialize the system (clears previous state)
+            if (!CartoonSystem.init('cartoon-stage')) {
+                return; // Stop if init fails
+            }
+
+            const stageW = CartoonSystem.stageElement.offsetWidth;
+            const stageH = CartoonSystem.stageElement.offsetHeight;
+
+            // Define lane heights and positions
+            const laneHeight = stageH / 6; // 6 zones: start, 4 lanes, finish
+            const startZoneY = stageH - laneHeight;
+            const finishZoneY = 0;
+            const roadStartY = laneHeight;
+            const roadEndY = stageH - laneHeight;
+
+            // 2. Set Background Layers
+            CartoonSystem.addBackground({
+                id: 'bg-finish',
+                zIndex: 0,
+                styles: { width: '100%', height: `${laneHeight}px`, top: `${finishZoneY}px`, backgroundColor: 'lightgreen' }
+            });
+            CartoonSystem.addBackground({
+                id: 'bg-road',
+                zIndex: 1,
+                styles: { width: '100%', height: `${roadEndY - roadStartY}px`, top: `${roadStartY}px`, backgroundColor: '#666' } // Dark grey road
+            });
+             // Add lane markings (optional visual enhancement)
+             for (let i = 1; i < 4; i++) {
+                 CartoonSystem.addBackground({
+                     id: `lane-marking-${i}`,
+                     zIndex: 2, // Above road base
+                     styles: {
+                         width: '100%', height: '4px',
+                         top: `${roadStartY + i * laneHeight - 2}px`, // Center on lane line
+                         backgroundColor: 'yellow',
+                         backgroundImage: 'linear-gradient(90deg, yellow 50%, transparent 50%)', // Dashed line effect
+                         backgroundSize: '30px 4px'
+                     }
+                 });
+             }
+            CartoonSystem.addBackground({
+                id: 'bg-start',
+                zIndex: 3, // Above road markings
+                styles: { width: '100%', height: `${laneHeight}px`, top: `${startZoneY}px`, backgroundColor: 'palegreen' }
+            });
+
+
+            // 3. Add the Frog Character
+            const frogSize = Math.min(laneHeight * 0.6, 30); // Frog size relative to lane
+            const startX = stageW / 2 - frogSize / 2;
+            const startY = startZoneY + (laneHeight - frogSize) / 2; // Center in start zone
+
+            CartoonSystem.addObject({
+                id: 'frog',
+                zIndex: 10,
+                styles: {
+                    width: `${frogSize}px`,
+                    height: `${frogSize}px`,
+                    left: `${startX}px`,
+                    top: `${startY}px`,
+                    backgroundColor: 'green',
+                    borderRadius: '30%' // Slightly rounded frog
+                }
+            });
+
+            // 4. Add Car Objects and Define Animations
+            const carHeight = laneHeight * 0.7;
+            const carWidth = carHeight * 2;
+            const carColors = ['red', 'blue', 'yellow', 'purple', 'orange'];
+            const carSpeeds = [2, 3, 2.5, 3.5]; // Duration to cross the stage
+
+            for (let i = 0; i < 4; i++) { // 4 lanes of traffic
+                const laneY = roadStartY + (i * laneHeight) + (laneHeight - carHeight) / 2; // Center car in lane
+                const direction = i % 2 === 0 ? 1 : -1; // Alternate direction per lane
+                const startX = direction === 1 ? -carWidth : stageW; // Start off-screen
+                const endX = direction === 1 ? stageW : -carWidth; // End off-screen
+
+                // Unique ID for each car
+                const carId = `car-lane-${i}`;
+
+                CartoonSystem.addObject({
+                    id: carId,
+                    zIndex: 5, // Below frog, above road markings
+                    styles: {
+                        width: `${carWidth}px`,
+                        height: `${carHeight}px`,
+                        left: `${startX}px`,
+                        top: `${laneY}px`,
+                        backgroundColor: carColors[i % carColors.length],
+                        borderRadius: '5px'
+                    }
+                });
+
+                // Animate the car using animateObject
+                // Use the main timeline for repeating animations
+                CartoonSystem.animateObject(carId, {
+                    x: endX - startX, // Animate relative distance
+                    duration: carSpeeds[i],
+                    ease: 'none',
+                    repeat: -1, // Repeat indefinitely
+                    repeatDelay: Math.random() * 2 + 1 // Random delay between repeats
+                }, 0); // Start all cars at time 0
+            }
+
+             // 5. Define Frog Movement (Example: Simple automatic sequence)
+             // We use the timeline to sequence the frog's hops.
+             const hopDuration = 0.3; // Time per hop
+             const hopEase = 'power1.out';
+
+             // Add labels for easier seeking/control if needed
+             CartoonSystem.addLabel("frogStart", 0);
+
+             // Sequence the hops using relative timeline positioning
+             for (let i = 0; i < 5; i++) { // 5 hops to reach the finish zone
+                 CartoonSystem.animateObject('frog', {
+                     y: `-=${laneHeight}`, // Move up one lane height
+                     duration: hopDuration,
+                     ease: hopEase
+                 }, `>${0.5}`); // Start 0.5s after the previous animation ends
+             }
+
+             // Add a "win" animation/state change at the end
+             CartoonSystem.timeline.call(() => {
+                 console.log("Frog reached the finish!");
+                 gsap.to('#frog', { scale: 1.5, duration: 0.3, yoyo: true, repeat: 1, backgroundColor: 'gold' });
+                 // Could also display a win message
+             }, ">+0.1"); // Call shortly after the last hop completes
+
+
+            // Note: Collision detection is not implemented in this simple example.
+
+            console.log("Cartoon created. Timeline ready.");
+        }
+
+
+        // --- Event Listeners ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // Create the cartoon automatically on load
+            createCartoon();
+
+            // Setup button controls
+            document.getElementById('playBtn')?.addEventListener('click', () => CartoonSystem.play());
+            document.getElementById('pauseBtn')?.addEventListener('click', () => CartoonSystem.pause());
+            document.getElementById('restartBtn')?.addEventListener('click', () => CartoonSystem.restart());
+
+            // Initial play - uncomment to auto-play
+            // CartoonSystem.play();
+        });
+
+    </script>
+
+    <footer>
+      <div id="explaination-container">
+        <pre>
+          <code>
+            
+**Explanation:**
+
+1.  **HTML:** Sets up the basic page structure, includes the GSAP library via CDN, defines the `#cartoon-stage` div, and adds basic control buttons and the accessibility toggle.
+2.  **CSS:** Provides styling for the stage, ensures elements added by the system are `position: absolute`, and styles the buttons.
+3.  **JavaScript (`CartoonSystem`):**
+    * Implements the `CartoonSystem` object as designed.
+    * `init`: Sets up the stage reference, initializes the main GSAP timeline, and calls `setupAccessibility`. Includes a `clearStage` call to handle restarts.
+    * `clearStage`: Removes previously added elements from the stage DOM and clears the internal `objects` tracker.
+    * `setupAccessibility`: Uses `gsap.matchMedia` to detect the user's motion preference and sets a `this.prefersReducedMotion` flag. It also links the UI checkbox to refresh the setting (though a full timeline rebuild might be needed for immediate effect in complex scenarios).
+    * `addElement` (and aliases `addBackground`, `addObject`): Creates a `div`, applies styles, adds it to the stage, and stores its reference. Handles optional timed removal via the timeline.
+    * `removeElement` (and aliases): Removes an element from the DOM and the `objects` store, with an option for a fade-out effect.
+    * `animateObject`: The core animation function. It checks the `prefersReducedMotion` flag. If true, it attempts a simpler animation (like a fade) or skips the animation. If false, it adds the full GSAP animation to the main timeline using `timeline.to()`.
+    * `animateSprite` / `setObjectSpriteFrame`: Included as placeholders based on the design, but their internal logic is commented out as this example doesn't use actual sprite sheets. They include basic checks for necessary configuration and the reduced motion flag.
+    * Timeline Controls (`play`, `pause`, `seek`, `restart`, `addLabel`, `addDelay`, `getTimeline`): Provide straightforward wrappers around the GSAP timeline methods. The `restart` function now calls `createCartoon()` again to rebuild the scene.
+4.  **JavaScript (`createCartoon`):**
+    * This function orchestrates the creation of the specific frog animation.
+    * It calls `CartoonSystem.init()` first.
+    * It adds background elements for the start/finish zones and the road using `addBackground`. Lane markings are added for visual detail.
+    * It adds the frog and car objects using `addObject`, calculating their initial positions.
+    * It uses `animateObject` to create infinitely repeating animations for the cars, starting them all at time 0 on the timeline.
+    * It sequences the frog's upward hops using `animateObject` and relative timeline positioning (`>+0.5`), creating a step-by-step movement.
+    * A final `timeline.call` adds a small visual effect when the frog reaches the end.
+5.  **Event Listeners:**
+    * The `DOMContentLoaded` listener ensures the script runs after the page is ready.
+    * It calls `createCartoon()` to set up the animation.
+    * It attaches the `CartoonSystem` control functions to the corresponding buttons.
+
+Now you have a working example demonstrating the `CartoonSystem` structure and its use in creating a simple animation.
+          </code>
+        </pre>
+      </div>
+    </footer>
+</body>
+</html>
