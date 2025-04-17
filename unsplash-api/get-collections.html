@@ -38,24 +38,23 @@
   </style>
 </head>
 <body>
-  <h1>iLostMyLeggos - Unsplash Collection</h1>
+  <h1>Unsplash Collection</h1>
   <h2>Testing Unsplash API Features</h2>
   <div id="gallery" class="gallery"></div>
 
   <script>
-    // https://unsplash.com/collections/uRKWukI9roc/ilostmyleggos/533812e166e91f614a732a7ca5fed8c1
+    // For Random use: https://api.unsplash.com/photos/random?client_id=<id>&count=1&collection=<id>
     // Replace with your Unsplash API keys and collection details.
-    const accessKey = 'sGUSyL38_dBc-G2tIghcleeh-qmH1zwBCgh070cd4nE';
-    const collectionId = '8pfoPT8KEMc';
-    const appName = 'ILostMyLeggos'; // Change this to your website/app name for proper attribution.
+    const accessKey = '<access-key>';
+    const collectionId = '<collection-id>';
+    const appName = '<app-name>'; // Change this to your website/app name for proper attribution.
     
     // Fetch photos from the specified Unsplash collection.
-    fetch(`https://api.unsplash.com/collections/${collectionId}?client_id=${accessKey}`)
+    fetch(`https://api.unsplash.com/collections/${collectionId}/photos?client_id=${accessKey}&per_page=10`)
       .then(response => {
         
         // Additional Logging
         console.log('Response Status:', response.status);
-        console.log('response.json()', response.json());
        
         if (!response.ok) {
           throw new Error('Failed to fetch photos from Unsplash');
@@ -63,6 +62,7 @@
         return response.json();
       })
       .then(data => {
+        console.log('data:', data.length);
         const gallery = document.getElementById('gallery');
 
         // Loop through each photo returned from the API.
