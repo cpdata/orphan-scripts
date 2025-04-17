@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>My Unsplash Collection</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f8f8f8;
+      padding: 20px;
+    }
+    .gallery {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    .photo-container {
+      background: #fff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      padding: 10px;
+      border-radius: 8px;
+      width: 300px;
+    }
+    .photo-container img {
+      width: 100%;
+      display: block;
+      border-radius: 4px;
+    }
+    .attribution {
+      font-size: 0.8em;
+      color: #555;
+      margin-top: 8px;
+    }
+    .attribution a {
+      text-decoration: none;
+      color: #0073e6;
+    }
+  </style>
+</head>
+<body>
+  <h1>iLostMyLeggos - Unsplash Collection</h1>
+  <h2>Testing Unsplash API Features</h2>
+  <div id="gallery" class="gallery"></div>
+
+  <script>
+    // https://unsplash.com/collections/uRKWukI9roc/ilostmyleggos/533812e166e91f614a732a7ca5fed8c1
+    // Replace with your Unsplash API keys and collection details.
+    const accessKey = 'sGUSyL38_dBc-G2tIghcleeh-qmH1zwBCgh070cd4nE';
+    const collectionId = '8pfoPT8KEMc';
+    const appName = 'ILostMyLeggos'; // Change this to your website/app name for proper attribution.
+    
+    // Fetch photos from the specified Unsplash collection.
+    fetch(`https://api.unsplash.com/collections/${collectionId}?client_id=${accessKey}`)
+      .then(response => {
+        
+        // Additional Logging
+        console.log('Response Status:', response.status);
+        console.log('response.json()', response.json());
+       
+        if (!response.ok) {
+          throw new Error('Failed to fetch photos from Unsplash');
+        }
+        return response.json();
+      })
+      .then(data => {
+        const gallery = document.getElementById('gallery');
+
+        // Loop through each photo returned from the API.
+        data.forEach(photo => {
+          // Create a container for each photo and its attribution.
+          const container = document.createElement('div');
+          container.classList.add('photo-container');
+
+          // Create and add the image element.
+          const img = document.createElement('img');
+          // Use the CDN URL from the API response (hotlinking is allowed as per Unsplash guidelines).
+          img.src = photo.urls.thumb;
+          img.alt = photo.alt_description || 'Unsplash Photo';
+          container.appendChild(img);
+
+          // Create and add the attribution element.
+          const attribution = document.createElement('div');
+          attribution.classList.add('attribution');
+          
+          // Prepare photographer attribution links with UTM parameters.
+          const photographerName = photo.user.name;
+          const photographerUsername = photo.user.username;
+          const photographerURL = `https://unsplash.com/@${photographerUsername}?utm_source=${appName}&utm_medium=referral`;
+          const unsplashURL = `https://unsplash.com/?utm_source=${appName}&utm_medium=referral`;
+
+          attribution.innerHTML = `Photo by <a href="${photographerURL}" target="_blank" rel="noopener noreferrer">${photographerName}</a> on <a href="${unsplashURL}" target="_blank" rel="noopener noreferrer">Unsplash</a>`;
+          container.appendChild(attribution);
+
+          // Append the container to the gallery.
+          gallery.appendChild(container);
+        });
+      })
+      .catch(error => {
+        console.error('Error fetching photos:', error);
+        const gallery = document.getElementById('gallery');
+        gallery.innerHTML = `<p>Error loading photos. Please try again later.</p>`;
+      });
+  </script>
+</body>
+</html>
