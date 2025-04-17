@@ -87,8 +87,9 @@
           const photographerUsername = photo.user.username;
           const photographerURL = `https://unsplash.com/@${photographerUsername}?utm_source=${appName}&utm_medium=referral`;
           const unsplashURL = `https://unsplash.com/?utm_source=${appName}&utm_medium=referral`;
+          const photoURL = `https://unsplash.com/photos/${photo.slug}?utm_source=${appName}&utm_medium=referral`;
 
-          attribution.innerHTML = `Photo by <a href="${photographerURL}" target="_blank" rel="noopener noreferrer">${photographerName}</a> on <a href="${unsplashURL}" target="_blank" rel="noopener noreferrer">Unsplash</a>`;
+          attribution.innerHTML = `Photo <a href="${photoURL}" target="_blank" rel="noopener noreferrer">${photo.slug.en}</a> by <a href="${photographerURL}" target="_blank" rel="noopener noreferrer">${photographerName}</a> on <a href="${unsplashURL}" target="_blank" rel="noopener noreferrer">Unsplash</a><br/>Photo Id: ${photo.id}`;
           container.appendChild(attribution);
 
           // Append the container to the gallery.
