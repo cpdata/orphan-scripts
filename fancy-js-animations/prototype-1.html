@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fancy Animation with DB Cycle (Final)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* CSS Variables */
+        :root {
+            --packet-glow-color: #f97316;
+            --db-glow-color: #93c5fd;
+            --db-pulse-glow-color: #93c5fd;
+            --logo-active-glow-color: rgba(59, 130, 246, 0.5);
+            --social-icon-color: #e5e7eb;
+            --cloud-glow-color: #a7f3d0;
+            --status-text-color: #9ca3af; /* Gray for status text */
+            --stop-percent: 100%;
+            --envelope-duration: 2500ms;
+            --meter-fill-percent: 0%;
+        }
+
+        /* Body styling */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; padding: 1rem; box-sizing: border-box; overflow: hidden;
+        }
+
+        /* Main container */
+        .animation-container {
+            position: relative; width: 90vw; max-width: 600px; aspect-ratio: 5 / 7;
+            max-height: calc(100vh - 2rem); background-image: linear-gradient(to bottom right, #1f2937, #111827);
+            border-radius: 0.75rem; border: 1px solid #374151;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 6%; box-sizing: border-box; overflow: visible;
+        }
+
+        /* SVG path container */
+        .path-svg-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 1; pointer-events: none;
+        }
+        #debugPathGroup path {
+             stroke: #4b5563; stroke-width: 1; fill: none; stroke-dasharray: 3, 5; opacity: 0.4;
+        }
+        /* Specific style for social debug paths */
+        #debug-social-path-twitter, #debug-social-path-facebook {
+             stroke: #f0abfc; stroke-width: 1; fill: none; opacity: 0.5;
+        }
+
+
+        /* Logo columns */
+        .logo-column {
+            display: flex; flex-direction: column; justify-content: space-between;
+            height: 100%; align-items: center; width: 15%;
+            z-index: 10; flex-shrink: 0; box-sizing: border-box;
+        }
+
+        /* Icon containers (Logos, DB, Cloud) */
+        .icon-container {
+            position: relative; width: clamp(35px, 8vw, 55px); height: clamp(35px, 8vw, 55px);
+            border-radius: 0.5rem; display: flex; justify-content: center; align-items: center;
+            color: #d1d5db; background-color: #374151; border: 1px solid #4b5563;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.2), 0 1px 2px 0 rgba(0, 0, 0, 0.1);
+            flex-shrink: 0; box-sizing: border-box;
+            transition: transform 0.15s ease-out, box-shadow 0.2s ease-in-out;
+            animation: logo-idle-glow 4s infinite alternate ease-in-out;
+        }
+        .icon-container:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+            animation-play-state: paused;
+        }
+        .icon-container.logo-active {
+            transform: scale(1.15); box-shadow: 0 0 15px 5px var(--logo-active-glow-color); animation: none;
+        }
+        .icon-container svg { width: 60%; height: 60%; stroke-width: 1.5; }
+
+        /* Center column */
+        .center-column {
+            display: flex; flex-direction: column;
+            /* FIX 1: Center DB vertically */
+            justify-content: center;
+            align-items: center;
+            height: 100%; flex-grow: 1;
+            z-index: 10; flex-shrink: 0; box-sizing: border-box;
+            /* FIX 1: Make relative for absolute positioning of children */
+            position: relative;
+            padding: 5% 0; /* Adjust padding */
+        }
+
+        /* Status Text */
+        #status-text {
+            position: absolute;
+            top: 5%; /* Position near top */
+            left: 50%;
+            transform: translateX(-50%);
+            color: var(--status-text-color);
+            font-size: clamp(0.8rem, 2.5vw, 1rem); /* Responsive font size */
+            font-weight: 500;
+            text-align: center;
+            width: 90%; /* Allow wrapping */
+            height: 1.5em; /* Reserve space */
+            white-space: nowrap;
+            z-index: 11; /* Above icons */
+        }
+        /* Typing Ellipsis Animation */
+        #status-text.typing::after {
+            content: '...';
+            display: inline-block;
+            vertical-align: bottom;
+            animation: typing-ellipsis 1.2s infinite steps(4, end);
+            overflow: hidden; /* Hide ellipsis during animation steps */
+        }
+
+
+        /* DB Placeholder */
+        #db-placeholder {
+             position: relative; /* Keep relative for ::before */
+             color: #93c5fd; background-color: #1f2937; border: 2px solid transparent;
+             transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease-in-out;
+             --meter-fill-percent: 0%; overflow: hidden;
+             width: clamp(35px, 8vw, 55px); height: clamp(35px, 8vw, 55px);
+             border-radius: 0.5rem; display: flex; justify-content: center; align-items: center;
+             animation: db-idle-pulse 800ms infinite ease-in-out;
+             flex-shrink: 0; /* Prevent shrinking */
+        }
+        #db-placeholder svg { width: 60%; height: 60%; position: relative; z-index: 2; }
+        #db-placeholder::before { /* Fill meter */
+            content: ''; position: absolute; inset: 0; background-color: var(--db-glow-color, #93c5fd);
+            z-index: 1; clip-path: inset(calc(100% - var(--meter-fill-percent)) 0 0 0);
+            transition: clip-path 0.3s linear; opacity: 0.75; border-radius: inherit;
+        }
+
+        /* Cloud Icon */
+        #cloud-icon {
+            /* FIX 1: Absolute positioning at bottom */
+            position: absolute;
+            bottom: 5%; /* Adjust as needed */
+            left: 50%;
+            transform: translateX(-50%);
+            /* --- */
+            width: clamp(45px, 10vw, 65px); height: clamp(45px, 10vw, 65px);
+            color: #9ca3af; background-color: #4b5563; border-color: #6b7280;
+            animation: none; box-shadow: 0 0 8px 2px rgba(167, 243, 208, 0);
+            transition: box-shadow 0.3s ease-in-out;
+        }
+        #cloud-icon.cloud-pulsing { animation: cloudPulseGlow 1s infinite ease-in-out; }
+
+
+        /* Data packet styling */
+        .data-packet {
+            position: absolute; width: clamp(16px, 3.5vw, 22px); height: clamp(16px, 3.5vw, 22px);
+            opacity: 0; pointer-events: none; offset-distance: 0%;
+            z-index: 6; /* FIX 2: Higher z-index than shadows */
+            transform: none; offset-path: none; top: 0; left: 0; box-sizing: border-box;
+            --stop-percent: 100%;
+        }
+        .data-packet svg { width: 100%; height: 100%; display: block; }
+        /* FIX 2: Add border to main packet SVG */
+        .data-packet svg path {
+            stroke: rgba(255, 255, 255, 0.3);
+            stroke-width: 0.5px;
+        }
+
+        /* Shadow Packet Styling */
+        .data-packet-shadow {
+            position: absolute; width: clamp(16px, 3.5vw, 22px); height: clamp(16px, 3.5vw, 22px);
+            pointer-events: none; offset-distance: 0%;
+            z-index: 5; /* Lower z-index than main packet */
+            offset-path: none; top: 0; left: 0; box-sizing: border-box;
+            --stop-percent: 100%;
+            /* Opacity/Transform/Filter set inline by JS */
+        }
+        .data-packet-shadow svg { width: 100%; height: 100%; display: block; }
+        /* FIX 2: Shadows should NOT have the extra border */
+        .data-packet-shadow svg path {
+            stroke: none;
+            stroke-width: 0;
+        }
+
+
+         /* Trail particle styling */
+        .particle {
+            position: absolute; width: clamp(4px, 1vw, 6px); height: clamp(4px, 1vw, 6px);
+            border-radius: 50%; pointer-events: none; offset-distance: 0%; z-index: 4;
+            offset-path: none; top: 0; left: 0; box-sizing: border-box; --stop-percent: 100%;
+            filter: blur(1.5px);
+            /* Opacity/Transform set inline by JS */
+        }
+
+         /* Social Packet Styling */
+        .social-packet {
+            position: absolute; width: clamp(20px, 4vw, 28px); height: clamp(20px, 4vw, 28px);
+            color: var(--social-icon-color); opacity: 0; pointer-events: none;
+            offset-distance: 0%; z-index: 12; transform: scale(0.8);
+            offset-path: none; top: 0; left: 0; box-sizing: border-box;
+            filter: drop-shadow(0 0 5px rgba(229, 231, 235, 0.5));
+        }
+        .social-packet svg { width: 100%; height: 100%; display: block; }
+
+
+        /* Animation classes */
+        .animate-packet {
+            offset-rotate: 0deg;
+            animation: sendPacket var(--envelope-duration, 2500ms) ease-out forwards;
+        }
+        .animate-trail-particle {
+             offset-rotate: 0deg;
+             animation:
+                sendParticle var(--envelope-duration, 2500ms) linear forwards,
+                fadeParticle var(--envelope-duration, 2500ms) ease-out forwards;
+        }
+        .animate-social {
+            offset-rotate: 0deg;
+            animation: sendSocial 1800ms ease-in-out forwards;
+        }
+
+
+        /* Keyframes Definitions */
+        @keyframes sendPacket {
+            0% { offset-distance: 0%; opacity: inherit; transform: inherit; }
+            15% { transform: scale(1); }
+            85% { opacity: inherit; transform: scale(1); }
+            100% { offset-distance: var(--stop-percent); opacity: 0; transform: scale(0.8); }
+        }
+         @keyframes sendParticle {
+            0% { offset-distance: 0%; }
+            100% { offset-distance: var(--stop-percent); }
+        }
+        @keyframes fadeParticle {
+             from { opacity: inherit; } to { opacity: 0; }
+        }
+        @keyframes logo-idle-glow {
+            from { box-shadow: 0 0 6px 1px rgba(209, 213, 219, 0.08); }
+            to { box-shadow: 0 0 10px 3px rgba(209, 213, 219, 0.12); }
+        }
+         @keyframes db-idle-pulse {
+             0%, 100% { box-shadow: 0 0 6px 2px rgba(147, 197, 253, 0.1); }
+             50% { box-shadow: 0 0 16px 6px var(--db-pulse-glow-color, #93c5fd); }
+         }
+         @keyframes sendSocial {
+             0% { offset-distance: 0%; opacity: 1; transform: scale(0.8); }
+             20% { transform: scale(1); }
+             80% { opacity: 1; transform: scale(1); }
+             100% { offset-distance: 100%; opacity: 0; transform: scale(0.7); }
+         }
+         @keyframes cloudPulseGlow {
+             0%, 100% { box-shadow: 0 0 8px 2px rgba(167, 243, 208, 0.3); }
+             50% { box-shadow: 0 0 20px 8px var(--cloud-glow-color); }
+         }
+         /* Typing Ellipsis Animation */
+         @keyframes typing-ellipsis {
+            0% { content: ''; }
+            25% { content: '.'; }
+            50% { content: '..'; }
+            75% { content: '...'; }
+            100% { content: '...'; }
+         }
+
+    </style>
+</head>
+<body>
+    <div class="animation-container" id="animationContainer">
+        <svg class="path-svg-container" id="pathSvg">
+             <g id="debugPathGroup">
+                <path id="debug-path-1" d="M0 0" /> <path id="debug-path-2" d="M0 0" /> <path id="debug-path-3" d="M0 0" /> <path id="debug-path-4" d="M0 0" /> <path id="debug-path-5" d="M0 0" /> <path id="debug-path-6" d="M0 0" /> <path id="debug-path-7" d="M0 0" /> <path id="debug-path-8" d="M0 0" />
+               
+                <path id="debug-social-path-twitter" d="M0 0" />
+                <path id="debug-social-path-facebook" d="M0 0" />
+             </g>
+        </svg>
+        <div class="logo-column">
+            <div class="icon-container" id="logo-1"> <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"> <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" /> </svg> </div>
+            <div class="icon-container" id="logo-2"> <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"> <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-2.66-2.512 3 3 0 00-3.75 0 3 3 0 00-3.75 0A3.75 3.75 0 004.5 19.5H18a4.5 4.5 0 004.5-4.5c0-2.176-1.58-4.01-3.686-4.418a4.504 4.504 0 00-8.632 0c-2.106.408-3.686 2.242-3.686 4.418z" /> </svg> </div>
+            <div class="icon-container" id="logo-3"> <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"> <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" /> </svg> </div>
+            <div class="icon-container" id="logo-4"> <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"> <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-2.66-2.512 3 3 0 00-3.75 0 3 3 0 00-3.75 0A3.75 3.75 0 004.5 19.5H18a4.5 4.5 0 004.5-4.5c0-2.176-1.58-4.01-3.686-4.418a4.504 4.504 0 00-8.632 0c-2.106.408-3.686 2.242-3.686 4.418z" /> </svg> </div>
+        </div>
+        <div class="center-column">
+           
+            <div id="status-text"></div>
+           
+            <div class="icon-container" id="db-placeholder">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"> <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12a7.5 7.5 0 0015 0m-15 0a7.5 7.5 0 1115 0m-15 0H3m16.5 0H21m-1.5 0H12m-8.457 3.077l1.41-.513m14.095-5.13l-1.41-.513M5.106 17.785l1.153-.964M16.74 7.215l1.153.964M7.81 13.51l-2.114 2.115M18.157 10.342l-2.114-2.115m-8.485 5.106l-1.41-.513M14.095 9.342l1.41-.513M5.106 6.215l1.153.964M16.74 16.785l1.153-.964M7.81 9.486l-2.114-2.114M18.157 13.658l-2.114 2.114" /> </svg>
+            </div>
+            
+            <div class="icon-container" id="cloud-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15a4.5 4.5 0 0 0 4.5 4.5H18a3.75 3.75 0 0 0 1.332-7.257 3 3 0 0 0-2.66-2.512 3 3 0 0 0-3.75 0 3 3 0 0 0-3.75 0A3.75 3.75 0 0 0 4.5 19.5H18a4.5 4.5 0 0 0 4.5-4.5c0-2.176-1.58-4.01-3.686-4.418a4.504 4.504 0 0 0-8.632 0C4.706 10.988 2.25 13.134 2.25 15Z" />
+                </svg>
+            </div>
+        </div>
+        <div class="logo-column">
+             <div class="icon-container" id="logo-5"> <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"> <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" /> </svg> </div>
+             <div class="icon-container" id="logo-6"> <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"> <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-2.66-2.512 3 3 0 00-3.75 0 3 3 0 00-3.75 0A3.75 3.75 0 004.5 19.5H18a4.5 4.5 0 004.5-4.5c0-2.176-1.58-4.01-3.686-4.418a4.504 4.504 0 00-8.632 0c-2.106.408-3.686 2.242-3.686 4.418z" /> </svg> </div>
+             <div class="icon-container" id="logo-7"> <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"> <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" /> </svg> </div>
+             <div class="icon-container" id="logo-8"> <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"> <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-2.66-2.512 3 3 0 00-3.75 0 3 3 0 00-3.75 0A3.75 3.75 0 004.5 19.5H18a4.5 4.5 0 004.5-4.5c0-2.176-1.58-4.01-3.686-4.418a4.504 4.504 0 00-8.632 0c-2.106.408-3.686 2.242-3.686 4.418z" /> </svg> </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Configuration Constants ---
+        const animationDuration = 2500;
+        const triggerInterval = 400;
+        const logoActiveDuration = 200;
+        const numberOfParticles = 18; // Increased length
+        const particleDelayIncrement = 10; // Denser trail
+        const packetsNeededToFill = 25;
+        const numberOfShadows = 3;
+        const shadowDelayIncrement = 100; // More spaced out shadows
+        const socialAnimationDuration = 1800;
+        const cloudPulseDuration = 1500;
+
+        // Color Palette
+        const packetColors = ['#ec4899', '#a855f7', '#3b82f6', '#f97316'];
+        const cloudPulseColors = ['#34d399', '#60a5fa', '#f87171', '#facc15'];
+
+        // --- Element References ---
+        const container = document.getElementById('animationContainer');
+        const dbElement = document.getElementById('db-placeholder');
+        const cloudIcon = document.getElementById('cloud-icon');
+        const statusTextElement = document.getElementById('status-text'); // Status text ref
+        const logoElements = Array.from({ length: 8 }, (_, i) => document.getElementById(`logo-${i + 1}`));
+        const debugPathElements = Array.from({ length: 8 }, (_, i) => document.getElementById(`debug-path-${i + 1}`));
+        const debugSocialPathTwitter = document.getElementById('debug-social-path-twitter'); // Ref for twitter path debug
+        const debugSocialPathFacebook = document.getElementById('debug-social-path-facebook'); // Ref for facebook path debug
+
+
+        // --- Animation State Variables ---
+        const pathOrder = [1, 5, 2, 6, 3, 7, 4, 8];
+        let currentPathIndex = -1;
+        const totalPaths = pathOrder.length;
+        let animationIntervalId = null;
+        let calculatedPathData = [];
+        let dbToTwitterPathString = ''; // Store calculated twitter path
+        let dbToFacebookPathString = ''; // Store calculated facebook path
+        let currentState = 'FILLING'; // States: 'FILLING', 'SENDING_SOCIAL'
+        let packetsReceived = 0;
+        let lastPacketColor = packetColors[0];
+        let continuousPulseColorIntervalId = null;
+        let cloudPulseColorIntervalId = null;
+        let socialIconsFinished = 0;
+
+        // --- Utility: Debounce Function ---
+        function debounce(func, wait) { /* ... unchanged ... */
+             let timeout;
+             return function executedFunction(...args) {
+                 const later = () => { clearTimeout(timeout); func(...args); };
+                 clearTimeout(timeout);
+                 timeout = setTimeout(later, wait);
+             };
+        }
+
+        // --- Update Status Text Function ---
+        function updateStatusText(text, animateEllipsis = false) {
+            if (statusTextElement) {
+                statusTextElement.textContent = text;
+                if (animateEllipsis) {
+                    statusTextElement.classList.add('typing');
+                } else {
+                    statusTextElement.classList.remove('typing');
+                }
+            }
+        }
+
+
+        // --- Path Calculation Functions ---
+        function calculateLogoPaths() {
+             // (No changes needed in this function)
+             console.log("Calculating logo animation paths...");
+             calculatedPathData = [];
+             const typicalPacketWidth = Math.max(16, Math.min(container.clientWidth * 0.035, 22));
+             const packetHalfWidth = typicalPacketWidth / 2;
+             if (!container || !dbElement || logoElements.some(el => !el)) { console.error("Missing elements."); return; }
+             const containerRect = container.getBoundingClientRect();
+             const dbRect = dbElement.getBoundingClientRect();
+             const dbRelativeTop = dbRect.top - containerRect.top;
+             const dbRelativeLeft = dbRect.left - containerRect.left;
+             const dbVerticalCenterY = dbRelativeTop + dbRect.height / 2;
+             const dbLeftEdgeX = dbRelativeLeft;
+             const dbRightEdgeX = dbRelativeLeft + dbRect.width;
+             const endpointOffsetFactor = 0.3;
+             const endpointOffsetValue = dbRect.width * endpointOffsetFactor;
+
+             logoElements.forEach((logo, index) => {
+                  if (!logo) return;
+                 const logoRect = logo.getBoundingClientRect();
+                 const isLeftSide = index < 4;
+                 const isTopHalf = (index < 2) || (index >= 4 && index < 6);
+                 let startX; const startY = (logoRect.top + logoRect.height / 2) - containerRect.top;
+                 if (isLeftSide) { startX = (logoRect.left + logoRect.width) - containerRect.left; } else { startX = logoRect.left - containerRect.left; }
+                 let targetEndX; const targetEndY = dbVerticalCenterY;
+                 if (isLeftSide) { targetEndX = dbLeftEdgeX; } else { targetEndX = dbRightEdgeX; }
+                 let finalEndX; const finalEndY = targetEndY;
+                 if (isLeftSide) { finalEndX = targetEndX - endpointOffsetValue; } else { finalEndX = targetEndX + endpointOffsetValue; }
+                 const deltaX = finalEndX - startX; const deltaY = finalEndY - startY;
+                 const distance = Math.max(1, Math.sqrt(deltaX * deltaX + deltaY * deltaY));
+                 const midX = startX + deltaX * 0.5; const midY = startY + deltaY * 0.5;
+                 const normX = deltaX / distance; const normY = deltaY / distance;
+                 const perpX = -normY; const perpY = normX;
+                 const horizontalInfluenceFactor = 0.4;
+                 const perpendicularMagnitudeFactor = 0.18;
+                 const arrivalHorizontalFactor = 0.5;
+                 const perpendicularMagnitude = containerRect.width * perpendicularMagnitudeFactor;
+                 const forwardMagnitude = (distance / 2) * 0.25;
+                 let cp1X, cp1Y, cp2X, cp2Y, cp3X, cp3Y;
+                 const sideMultiplier = isLeftSide ? 1 : -1; const verticalMultiplier = isTopHalf ? 1 : -1;
+                 const perpOffsetX = perpX * perpendicularMagnitude * sideMultiplier * verticalMultiplier;
+                 const perpOffsetY = perpY * perpendicularMagnitude * sideMultiplier * verticalMultiplier;
+                 cp1X = startX + normX * forwardMagnitude + perpOffsetX;
+                 cp1Y = startY + normY * forwardMagnitude - perpOffsetY;
+                 cp2X = midX - normX * forwardMagnitude - perpOffsetX;
+                 cp2Y = midY - normY * forwardMagnitude - perpOffsetY;
+                 cp3Y = finalEndY;
+                 const arrivalHorizontalOffset = Math.abs(finalEndX - midX) * arrivalHorizontalFactor;
+                 cp3X = isLeftSide ? (finalEndX + arrivalHorizontalOffset) : (finalEndX - arrivalHorizontalOffset);
+                 const pathDataForSVG = `M ${startX.toFixed(2)} ${startY.toFixed(2)} C ${cp1X.toFixed(2)} ${cp1Y.toFixed(2)}, ${cp2X.toFixed(2)} ${cp2Y.toFixed(2)}, ${midX.toFixed(2)} ${midY.toFixed(2)} S ${cp3X.toFixed(2)} ${cp3Y.toFixed(2)}, ${finalEndX.toFixed(2)} ${finalEndY.toFixed(2)}`;
+                 const pathDataForCSS = `path("${pathDataForSVG}")`;
+                 let stopPercent = 100; const stopY = targetEndY;
+                 let stopX; if (isLeftSide) { stopX = targetEndX + packetHalfWidth; } else { stopX = targetEndX - packetHalfWidth; }
+                 const debugPathElement = debugPathElements[index];
+                 if (debugPathElement && typeof debugPathElement.getTotalLength === 'function') {
+                     debugPathElement.setAttribute('d', pathDataForSVG);
+                     const totalLength = debugPathElement.getTotalLength();
+                     if (totalLength > 0) {
+                         let bestLength = totalLength; let minDistSq = Infinity; const steps = 200;
+                         for (let i = 0; i <= steps; i++) {
+                             const currentLength = (i / steps) * totalLength;
+                             const point = debugPathElement.getPointAtLength(currentLength);
+                             const distSq = Math.pow(point.x - stopX, 2) + Math.pow(point.y - stopY, 2);
+                             if (distSq < minDistSq) { minDistSq = distSq; bestLength = currentLength; }
+                         }
+                         stopPercent = Math.max(0, Math.min(100, (bestLength / totalLength) * 100));
+                     }
+                 } else { console.warn(`Could not measure path for index ${index}. Using default stopPercent.`); }
+                 calculatedPathData[index] = { pathString: pathDataForCSS, stopPercent: stopPercent };
+             });
+             console.log("Logo paths recalculated.");
+        }
+
+        function calculateSocialPaths() { // Renamed to plural
+            console.log("Calculating social icon paths...");
+            if (!container || !dbElement || !cloudIcon) {
+                console.error("Missing elements for social path calculation.");
+                dbToTwitterPathString = '';
+                dbToFacebookPathString = '';
+                return;
+            }
+            const containerRect = container.getBoundingClientRect();
+            const dbRect = dbElement.getBoundingClientRect();
+            const cloudRect = cloudIcon.getBoundingClientRect();
+
+            const startX = (dbRect.left + dbRect.width / 2) - containerRect.left;
+            const startY = dbRect.bottom - containerRect.top;
+            const endX = (cloudRect.left + cloudRect.width / 2) - containerRect.left;
+            const endY = cloudRect.top - containerRect.top;
+            const midY = startY + (endY - startY) / 2;
+            const curveFactor = 0.2 * containerRect.width; // Increased curve factor slightly
+
+            // Twitter Path (Curve Right)
+            const cp1X_tw = startX + curveFactor;
+            const cp1Y_tw = startY + (midY - startY) * 0.3;
+            const cp2X_tw = endX + curveFactor;
+            const cp2Y_tw = endY - (endY - midY) * 0.3;
+            const pathDataTwitter = `M ${startX.toFixed(2)} ${startY.toFixed(2)} C ${cp1X_tw.toFixed(2)} ${cp1Y_tw.toFixed(2)}, ${cp2X_tw.toFixed(2)} ${cp2Y_tw.toFixed(2)}, ${endX.toFixed(2)} ${endY.toFixed(2)}`;
+            dbToTwitterPathString = `path("${pathDataTwitter}")`;
+            if (debugSocialPathTwitter) debugSocialPathTwitter.setAttribute('d', pathDataTwitter);
+
+
+            // Facebook Path (Curve Left)
+            const cp1X_fb = startX - curveFactor; // Curve opposite direction
+            const cp1Y_fb = cp1Y_tw; // Same vertical curve profile
+            const cp2X_fb = endX - curveFactor; // Curve opposite direction
+            const cp2Y_fb = cp2Y_tw; // Same vertical curve profile
+            const pathDataFacebook = `M ${startX.toFixed(2)} ${startY.toFixed(2)} C ${cp1X_fb.toFixed(2)} ${cp1Y_fb.toFixed(2)}, ${cp2X_fb.toFixed(2)} ${cp2Y_fb.toFixed(2)}, ${endX.toFixed(2)} ${endY.toFixed(2)}`;
+            dbToFacebookPathString = `path("${pathDataFacebook}")`;
+             if (debugSocialPathFacebook) debugSocialPathFacebook.setAttribute('d', pathDataFacebook);
+
+             console.log("Social paths recalculated.");
+        }
+
+        // --- Function to Trigger a Single Logo->DB Animation Cycle ---
+        function triggerSingleAnimation() {
+             if (currentState !== 'FILLING' || calculatedPathData.length === 0) return;
+
+             // Update status on first packet
+             if (packetsReceived === 0) {
+                 updateStatusText('Analyzing', true);
+             }
+
+             currentPathIndex = (currentPathIndex + 1) % totalPaths;
+             const pathNumber = pathOrder[currentPathIndex];
+             const pathIndex = pathNumber - 1;
+             const pathInfo = calculatedPathData[pathIndex];
+             const originatingLogo = logoElements[pathIndex];
+
+             if (!pathInfo || !pathInfo.pathString || !originatingLogo) { console.error(`Data missing for index ${pathIndex}`); return; }
+
+             const randomColor = packetColors[Math.floor(Math.random() * packetColors.length)];
+             lastPacketColor = randomColor;
+
+             // --- Create Main Data Packet ---
+             const newDataPacket = document.createElement('div');
+             newDataPacket.classList.add('data-packet');
+             newDataPacket.innerHTML = ` <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 16"> <path d="M4 0h5.293A1 1 0 0 1 10 .293L13.707 4a1 1 0 0 1 .293.707V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2zm5.5 1.5v2.793a1 1 0 0 0 1 1H13v-.5L9.5 1.5z"/> <path fill-rule="evenodd" d="M4 7h8v1H4V7zm0 2h8v1H4V9zm0 2h5v1H4v-1z"/> </svg> `;
+             newDataPacket.style.color = randomColor;
+             newDataPacket.style.setProperty('--packet-glow-color', randomColor);
+             newDataPacket.style.opacity = '1';
+             newDataPacket.style.transform = 'scale(0.8)';
+             newDataPacket.addEventListener('animationend', () => newDataPacket.remove(), { once: true });
+             container.appendChild(newDataPacket);
+
+              // --- Trigger Logo Pulse ---
+              originatingLogo.classList.add('logo-active');
+              originatingLogo.style.setProperty('--logo-active-glow-color', randomColor);
+              setTimeout(() => {
+                  originatingLogo.classList.remove('logo-active');
+                  originatingLogo.style.removeProperty('--logo-active-glow-color');
+                }, logoActiveDuration);
+
+             // --- Apply Path and Animation to Main Packet ---
+             requestAnimationFrame(() => {
+                 newDataPacket.style.offsetPath = pathInfo.pathString;
+                 newDataPacket.style.setProperty('--stop-percent', `${pathInfo.stopPercent}%`);
+                 requestAnimationFrame(() => newDataPacket.classList.add('animate-packet'));
+             });
+
+             // --- Create Shadow Packet Trail ---
+             for (let j = 0; j < numberOfShadows; j++) {
+                 const shadowPacket = document.createElement('div');
+                 shadowPacket.classList.add('data-packet-shadow');
+                 shadowPacket.innerHTML = newDataPacket.innerHTML;
+                 shadowPacket.style.color = randomColor;
+                 shadowPacket.style.setProperty('--packet-glow-color', randomColor);
+                 shadowPacket.style.position = 'absolute';
+
+                 const shadowScale = Math.max(0.7, 1 - (j + 1) * 0.1).toFixed(2);
+                 const shadowOpacity = Math.max(0.05, 0.15 - j * 0.05).toFixed(2); // Much fainter
+                 const shadowBlur = (1 + j * 0.5).toFixed(1);
+
+                 shadowPacket.style.opacity = shadowOpacity;
+                 shadowPacket.style.transform = `scale(${shadowScale})`;
+                 shadowPacket.style.filter = `blur(${shadowBlur}px) drop-shadow(0 0 3px var(--packet-glow-color, #f97316))`;
+
+                 shadowPacket.addEventListener('animationend', () => shadowPacket.remove(), { once: true });
+                 container.appendChild(shadowPacket);
+
+                 const shadowDelay = (j + 1) * shadowDelayIncrement; // Increased delay
+
+                 requestAnimationFrame(() => {
+                     shadowPacket.style.offsetPath = pathInfo.pathString;
+                     shadowPacket.style.setProperty('--stop-percent', `${pathInfo.stopPercent}%`);
+                     shadowPacket.style.animationDelay = `${shadowDelay}ms`;
+                     requestAnimationFrame(() => {
+                          shadowPacket.classList.add('animate-packet');
+                     });
+                 });
+             }
+
+
+             // --- Create Progressive Particle Trail ---
+             for (let i = 0; i < numberOfParticles; i++) { // Increased numberOfParticles
+                 const particle = document.createElement('div');
+                 particle.classList.add('particle');
+                 particle.style.backgroundColor = randomColor;
+
+                 // Adjusted progressive styling for more particles
+                 const scale = Math.max(0.2, 1 - i * 0.04).toFixed(2);
+                 const initialOpacity = Math.max(0.05, 0.7 - i * 0.035).toFixed(2);
+                 particle.style.opacity = initialOpacity;
+                 particle.style.transform = `scale(${scale})`;
+
+                 particle.addEventListener('animationend', () => particle.remove(), { once: true });
+                 container.appendChild(particle);
+
+                 const delay = i * particleDelayIncrement; // Denser trail
+
+                 requestAnimationFrame(() => {
+                     particle.style.offsetPath = pathInfo.pathString;
+                     particle.style.setProperty('--stop-percent', `${pathInfo.stopPercent}%`);
+                     particle.style.animationDelay = `${delay}ms`;
+                      requestAnimationFrame(() => particle.classList.add('animate-trail-particle'));
+                 });
+             }
+
+
+             // --- Update Progress Meter ---
+             packetsReceived++;
+             const progressPercent = Math.min(1, packetsReceived / packetsNeededToFill);
+             dbElement.style.setProperty('--meter-fill-percent', `${progressPercent * 100}%`);
+             dbElement.style.setProperty('--db-glow-color', lastPacketColor);
+
+              // --- Check if Meter is Full ---
+              if (packetsReceived >= packetsNeededToFill) {
+                  updateStatusText('Publishing', true); // Update status
+                  currentState = 'SENDING_SOCIAL';
+                  if (animationIntervalId) clearInterval(animationIntervalId);
+
+                  // Remove existing logo->db animations
+                  console.log("Removing active logo->db animations...");
+                  document.querySelectorAll('.data-packet, .data-packet-shadow, .particle').forEach(el => {
+                      if (container.contains(el)) { el.remove(); }
+                  });
+
+                  socialIconsFinished = 0; // Reset counter
+
+                  // Ensure social paths are calculated
+                  if (!dbToTwitterPathString || !dbToFacebookPathString) {
+                      calculateSocialPaths();
+                  }
+                  if (!dbToTwitterPathString || !dbToFacebookPathString) {
+                      console.error("Cannot send social icons, path calculation failed.");
+                      resetCycle(); return;
+                  }
+
+                  // --- Create and Animate Social Icons ---
+                  createAndAnimateSocialIcon('twitter', 0);
+                  createAndAnimateSocialIcon('facebook', 150);
+
+              }
+        }
+
+        // --- Function to create and animate a social icon ---
+        function createAndAnimateSocialIcon(type, delay) {
+            const socialPacket = document.createElement('div');
+            socialPacket.classList.add('social-packet');
+            socialPacket.id = `${type}-packet`;
+
+            if (type === 'twitter') {
+                 socialPacket.innerHTML = `<svg fill="currentColor" viewBox="0 0 16 16"><path d="M5.026 15c6.038 0 9.341-5.003 9.341-9.334 0-.14 0-.282-.006-.422A6.685 6.685 0 0 0 16 3.542a6.658 6.658 0 0 1-1.889.518 3.301 3.301 0 0 0 1.447-1.817 6.533 6.533 0 0 1-2.087.793A3.286 3.286 0 0 0 7.875 6.03a9.325 9.325 0 0 1-6.767-3.429 3.289 3.289 0 0 0 1.018 4.382A3.323 3.323 0 0 1 .64 6.575v.045a3.288 3.288 0 0 0 2.632 3.218 3.203 3.203 0 0 1-.865.115 3.23 3.23 0 0 1-.614-.057 3.283 3.283 0 0 0 3.067 2.277A6.588 6.588 0 0 1 .79 13.58a6.32 6.32 0 0 1-.79-.045A9.344 9.344 0 0 0 5.026 15z"/></svg>`;
+            } else if (type === 'facebook') {
+                 socialPacket.innerHTML = `<svg fill="currentColor" viewBox="0 0 16 16"><path d="M16 8.049c0-4.446-3.582-8.05-8-8.05C3.58 0-.002 3.603-.002 8.05c0 4.017 2.926 7.347 6.75 7.951v-5.625h-2.03V8.05H6.75V6.275c0-2.017 1.195-3.131 3.022-3.131.876 0 1.791.157 1.791.157v1.98h-1.009c-.993 0-1.303.621-1.303 1.258v1.51h2.218l-.354 2.326H9.25V16c3.824-.604 6.75-3.934 6.75-7.951z"/></svg>`;
+            }
+
+            socialPacket.style.opacity = '0';
+            socialPacket.style.transform = 'scale(0.8)';
+
+            socialPacket.addEventListener('animationend', handleSocialAnimationEnd, { once: true });
+            container.appendChild(socialPacket);
+
+            // Apply the correct mirrored path
+            const pathString = (type === 'twitter') ? dbToTwitterPathString : dbToFacebookPathString;
+
+            requestAnimationFrame(() => {
+                socialPacket.style.offsetPath = pathString;
+                socialPacket.style.animationDelay = `${delay}ms`;
+                requestAnimationFrame(() => {
+                    socialPacket.classList.add('animate-social');
+                });
+            });
+        }
+
+        // --- Handle Social Icon Animation End ---
+        function handleSocialAnimationEnd(event) {
+            event.target.remove();
+            socialIconsFinished++;
+            if (socialIconsFinished >= 2) {
+                triggerCloudEffect();
+            }
+        }
+
+        // --- Trigger Cloud Pulse Effect ---
+        function triggerCloudEffect() {
+            console.log("Social icons arrived, triggering cloud effect.");
+            if (!cloudIcon) return;
+
+            cloudIcon.classList.add('cloud-pulsing');
+
+            if (cloudPulseColorIntervalId) clearInterval(cloudPulseColorIntervalId);
+            cloudPulseColorIntervalId = setInterval(() => {
+                const randomCloudColor = cloudPulseColors[Math.floor(Math.random() * cloudPulseColors.length)];
+                cloudIcon.style.setProperty('--cloud-glow-color', randomCloudColor);
+            }, 150);
+
+            // Set timeout to stop pulsing, show "Posted", and reset
+            setTimeout(() => {
+                if (cloudIcon) {
+                    cloudIcon.classList.remove('cloud-pulsing');
+                     cloudIcon.style.removeProperty('--cloud-glow-color');
+                }
+                if (cloudPulseColorIntervalId) clearInterval(cloudPulseColorIntervalId);
+                updateStatusText('Posted', false); // Show final status
+
+                // Add a short delay before resetting cycle after 'Posted'
+                setTimeout(resetCycle, 1000);
+
+            }, cloudPulseDuration);
+        }
+
+
+        // --- Function to Reset the Cycle Back to Filling State ---
+         function resetCycle() {
+              console.log("Resetting cycle...");
+              // Ensure cloud pulsing stops
+              if (cloudIcon && cloudIcon.classList.contains('cloud-pulsing')) {
+                  cloudIcon.classList.remove('cloud-pulsing');
+                  cloudIcon.style.removeProperty('--cloud-glow-color');
+              }
+              if (cloudPulseColorIntervalId) clearInterval(cloudPulseColorIntervalId);
+
+              currentState = 'FILLING';
+              packetsReceived = 0;
+              updateStatusText('', false); // Clear status text
+
+              dbElement.style.setProperty('--meter-fill-percent', '0%');
+              dbElement.style.removeProperty('--db-glow-color');
+
+              // Restart interval for new logo->db packets
+              if (animationIntervalId) clearInterval(animationIntervalId);
+              animationIntervalId = setInterval(triggerSingleAnimation, triggerInterval);
+              console.log("Cycle reset, resuming logo->db packet flow.");
+         }
+
+
+        // --- Event Listeners ---
+        const debouncedRecalculate = debounce(() => {
+             console.log("Resize detected, recalculating paths...");
+             if (animationIntervalId) clearInterval(animationIntervalId);
+             // Remove all transient elements on resize
+             document.querySelectorAll('.data-packet, .data-packet-shadow, .particle, .social-packet').forEach(el => {
+                 if (container.contains(el)) { el.remove(); }
+             });
+             // Clear calculated paths to force recalc
+             calculatedPathData = [];
+             dbToTwitterPathString = '';
+             dbToFacebookPathString = '';
+
+             calculateLogoPaths();
+             calculateSocialPaths(); // Recalculate social paths too
+
+              // Restart only if we were filling, otherwise reset completely
+              if (currentState === 'FILLING') {
+                  animationIntervalId = setInterval(triggerSingleAnimation, triggerInterval);
+                  console.log("Animation interval restarted after resize.");
+              } else {
+                  // If interrupted during social send, just reset
+                  resetCycle();
+              }
+        }, 250);
+        window.addEventListener('resize', debouncedRecalculate);
+
+        // --- Initialization ---
+        window.addEventListener('load', () => {
+             requestAnimationFrame(() => {
+                 requestAnimationFrame(() => {
+                    initializeAnimation();
+                 });
+             });
+        });
+
+        function initializeAnimation() {
+            console.log("Initializing animation...");
+            document.documentElement.style.setProperty('--envelope-duration', `${animationDuration}ms`);
+            // Log config... (updated)
+            console.log(`Particle count set to: ${numberOfParticles}`);
+            console.log(`Particle delay increment set to: ${particleDelayIncrement}ms`);
+            console.log(`Shadow count set to: ${numberOfShadows}`);
+            console.log(`Shadow delay increment set to: ${shadowDelayIncrement}ms`);
+
+            dbElement.style.setProperty('--meter-fill-percent', '0%');
+            updateStatusText('', false); // Ensure status is clear initially
+            calculateLogoPaths();
+            calculateSocialPaths(); // Calculate social paths initially too
+
+            if (animationIntervalId) clearInterval(animationIntervalId);
+            if (currentState === 'FILLING') {
+                 animationIntervalId = setInterval(triggerSingleAnimation, triggerInterval);
+                 console.log("Animation interval started.");
+            }
+
+            // Start continuous DB pulse color cycling interval
+            if (continuousPulseColorIntervalId) clearInterval(continuousPulseColorIntervalId);
+            continuousPulseColorIntervalId = setInterval(() => {
+                if (currentState === 'FILLING' && dbElement) {
+                     const randomPulseColor = packetColors[Math.floor(Math.random() * packetColors.length)];
+                     dbElement.style.setProperty('--db-pulse-glow-color', randomPulseColor);
+                }
+            }, 600);
+            console.log("Continuous DB pulse color cycling started.");
+        }
+
+    </script>
+
+</body>
+</html>
