@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Beam Button Designer</title>
+  <style>
+    :root {
+      --beam123-border-color1: #207593;
+      --beam123-border-color2: #89e9b2;
+      --beam123-border-color3: #fff4d4;
+      --beam123-border-color4: #ffb824;
+      --beam123-border-color5: #ff3c00;
+
+      --beam123-animation-speed: 4s;
+      --beam123-border-thickness: 2px;
+      --beam123-border-radius: 12px;
+      --beam123-rotation-direction: normal;
+
+      --beam123-button-height: 48px;
+      --beam123-button-width: 200px;
+      --beam123-font-size: 16px;
+      --beam123-line-height: 1.5;
+      --beam123-text-color: #f5f5f5;
+      --beam123-font-weight: 500;
+      --beam123-bg-color: #262626;
+      --beam123-font-family: sans-serif;
+    }
+
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      font-family: sans-serif;
+      background: #121212;
+      color: #fff;
+    }
+
+    .preview-area {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .beam123-button {
+      position: relative;
+      display: inline-block;
+      padding: var(--beam123-border-thickness);
+      border-radius: var(--beam123-border-radius);
+      background: transparent;
+      cursor: pointer;
+      z-index: 1;
+    }
+
+    .beam123-button::before {
+      content: "";
+      position: absolute;
+      top: calc(-1 * var(--beam123-border-thickness));
+      left: calc(-1 * var(--beam123-border-thickness));
+      right: calc(-1 * var(--beam123-border-thickness));
+      bottom: calc(-1 * var(--beam123-border-thickness));
+      z-index: 0;
+      background: linear-gradient(
+        270deg,
+        var(--beam123-border-color1),
+        var(--beam123-border-color2),
+        var(--beam123-border-color3),
+        var(--beam123-border-color4),
+        var(--beam123-border-color5),
+        var(--beam123-border-color1)
+      );
+      background-size: 600% 600%;
+      animation: beam123-animation var(--beam123-animation-speed) linear infinite;
+      border-radius: calc(var(--beam123-border-radius) + var(--beam123-border-thickness));
+      pointer-events: none;
+    }
+
+    @keyframes beam123-animation {
+      from {
+        background-position: 0% 50%;
+      }
+      to {
+        background-position: 200% 50%;
+      }
+    }
+
+    .beam123-inner {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: var(--beam123-button-height);
+      width: var(--beam123-button-width);
+      font-size: var(--beam123-font-size);
+      line-height: var(--beam123-line-height);
+      color: var(--beam123-text-color);
+      font-weight: var(--beam123-font-weight);
+      font-family: var(--beam123-font-family);
+      background-color: var(--beam123-bg-color);
+      border-radius: calc(var(--beam123-border-radius) - 2px);
+      text-align: center;
+    }
+
+    .sidebar {
+      width: 320px;
+      padding: 1rem;
+      background-color: #1e1e1e;
+      overflow-y: auto;
+      box-shadow: -2px 0 5px rgba(0,0,0,0.2);
+    }
+
+    .sidebar label {
+      display: block;
+      margin-top: 1rem;
+      font-size: 0.9rem;
+    }
+
+    .sidebar input,
+    .sidebar select {
+      width: 100%;
+      margin-top: 0.25rem;
+      padding: 0.25rem;
+      background: #2c2c2c;
+      border: 1px solid #444;
+      color: white;
+    }
+
+    .sidebar input[type=range] {
+      width: 100%;
+    }
+
+    .flex-between {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.8rem;
+      margin-top: 0.25rem;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.8);
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+    }
+
+    .modal-content {
+      background: #1e1e1e;
+      padding: 1rem;
+      max-width: 700px;
+      width: 100%;
+      border-radius: 8px;
+      overflow: auto;
+    }
+
+    .modal-content textarea {
+      width: 100%;
+      height: 150px;
+      margin-bottom: 1rem;
+      background: #121212;
+      color: #fff;
+      border: 1px solid #444;
+      padding: 0.5rem;
+      resize: vertical;
+    }
+
+    .copy-btn {
+      float: right;
+      cursor: pointer;
+      font-size: 0.9rem;
+      color: #0af;
+    }
+
+    .close-btn {
+      float: right;
+      cursor: pointer;
+      color: red;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="preview-area">
+    <button class="beam123-button">
+      <span class="beam123-inner" id="beam-button-text">Submit</span>
+    </button>
+  </div>
+
+  <div class="sidebar">
+    <label>Button Text
+      <input type="text" id="text-input" value="Submit" />
+    </label>
+
+    <label>Font Family
+      <select id="font-select">
+        <option value="sans-serif">Sans-serif</option>
+        <option value="serif">Serif</option>
+        <option value="monospace">Monospace</option>
+        <option value="cursive">Cursive</option>
+        <option value="Arial">Arial</option>
+        <option value="Georgia">Georgia</option>
+      </select>
+    </label>
+
+    <label>Font Size (<span id="fontSizeVal">16</span>px)
+      <div class="flex-between"><span>10</span><span>40</span></div>
+      <input type="range" min="10" max="40" value="16" id="font-size" />
+    </label>
+
+    <label>Font Weight (<span id="fontWeightVal">500</span>)
+      <div class="flex-between"><span>100</span><span>900</span></div>
+      <input type="range" min="100" max="900" step="100" value="500" id="font-weight" />
+    </label>
+
+    <label>Animation Speed (<span id="animSpeedVal">4</span>s)
+      <div class="flex-between"><span>1</span><span>10</span></div>
+      <input type="range" min="1" max="10" value="4" id="animation-speed" />
+    </label>
+
+    <label>Border Thickness (<span id="borderThicknessVal">2</span>px)
+      <div class="flex-between"><span>1</span><span>10</span></div>
+      <input type="range" min="1" max="10" value="2" id="border-thickness" />
+    </label>
+
+    <label>Border Radius (<span id="borderRadiusVal">12</span>px)
+      <div class="flex-between"><span>0</span><span>50</span></div>
+      <input type="range" min="0" max="50" value="12" id="border-radius" />
+    </label>
+
+    <label>Rotation Direction
+      <select id="rotation-direction">
+        <option value="normal">Normal</option>
+        <option value="reverse">Reverse</option>
+      </select>
+    </label>
+
+    <button style="margin-top: 1rem; width: 100%;" onclick="showCode()">Get the Code</button>
+  </div>
+
+  <div class="modal" id="codeModal">
+    <div class="modal-content">
+      <div><span class="close-btn" onclick="hideCode()">✖</span></div>
+      <h3>CSS</h3>
+      <textarea id="cssOutput" readonly></textarea>
+      <div class="copy-btn" onclick="copyCode('cssOutput')">📋 Copy CSS</div>
+      <h3>HTML</h3>
+      <textarea id="htmlOutput" readonly></textarea>
+      <div class="copy-btn" onclick="copyCode('htmlOutput')">📋 Copy HTML</div>
+    </div>
+  </div>
+
+  <script>
+    const updateVar = (id, variable, suffix = 'px') => {
+      const el = document.getElementById(id);
+      el.addEventListener('input', () => {
+        document.documentElement.style.setProperty(variable, el.value + suffix);
+        const label = document.getElementById(id + 'Val');
+        if (label) label.textContent = el.value;
+      });
+    };
+
+    updateVar('font-size', '--beam123-font-size');
+    updateVar('font-weight', '--beam123-font-weight', '');
+    updateVar('animation-speed', '--beam123-animation-speed', 's');
+    updateVar('border-thickness', '--beam123-border-thickness');
+    updateVar('border-radius', '--beam123-border-radius');
+    
+    document.getElementById('rotation-direction').addEventListener('change', e => {
+      const dir = e.target.value === 'reverse' ? 'reverse' : 'normal';
+      document.querySelector('@keyframes beam123-animation');
+      // If needed, reverse keyframes here dynamically
+    });
+
+    document.getElementById('font-select').addEventListener('change', e => {
+      document.documentElement.style.setProperty('--beam123-font-family', e.target.value);
+    });
+
+    document.getElementById('text-input').addEventListener('input', e => {
+      document.getElementById('beam-button-text').textContent = e.target.value;
+    });
+
+    function showCode() {
+      const css = [...document.styleSheets[0].cssRules].map(rule => rule.cssText).join('\n');
+      document.getElementById('cssOutput').value = css;
+      document.getElementById('htmlOutput').value = `<button class="beam123-button">\n  <span class="beam123-inner">Submit</span>\n</button>`;
+      document.getElementById('codeModal').style.display = 'flex';
+    }
+
+    function hideCode() {
+      document.getElementById('codeModal').style.display = 'none';
+    }
+
+    function copyCode(id) {
+      const el = document.getElementById(id);
+      el.select();
+      document.execCommand('copy');
+    }
+  </script>
+
+</body>
+</html>
