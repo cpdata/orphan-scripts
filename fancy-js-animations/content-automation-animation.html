@@ -1,0 +1,1747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fancy Animation with DB Cycle (Updated)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Poppins:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* CSS Variables */
+        :root {
+            --packet-glow-color: #f97316;
+            --db-glow-color: #93c5fd;
+            --db-pulse-glow-color: #93c5fd;
+            --db-approval-pulse-color: #10b981; /* Emerald */
+            --db-pop-glow-color: #ffffff; /* White glow for pop */
+            --logo-active-glow-color: rgba(59, 130, 246, 0.5);
+            --social-icon-color: #e5e7eb;
+            --cloud-glow-color: #a7f3d0;
+            --status-text-color: #a855f7; /* Purple (Default/Publishing/Requesting) */
+            --status-analyzing-color: #3b82f6; /* Blue */
+            --status-approval-color: #10b981; /* Emerald */
+            --status-posted-color: #3b82f6; /* Blue */
+            --label-color: #9ca3af;
+            --stream-bg-color: rgba(0, 0, 0, 0.2);
+            --stream-text-color: #a1a1aa; /* zinc-400 */
+            --stream-approval-pulse-color: rgba(16, 185, 129, 0.6); /* Emerald overlay - Increased opacity */
+            --stop-percent: 100%;
+            --packet-duration: 2500ms;
+            --content-creation-orbit-duration: 4000ms; /* Increased orbit duration */
+            --approval-duration: 1000ms;
+            --db-pop-duration: 400ms;
+            --checkmark-anim-duration: 600ms; /* Checkmark animation duration */
+            --confetti-duration: 1200ms;
+            --meter-fill-percent: 0%;
+        }
+        /* Body styling */
+        body {
+            font-family: 'Inter', sans-serif; background-color: #111827;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; padding: 1rem; box-sizing: border-box; overflow-x: hidden; /* Allow vertical scroll */
+        }
+        /* Main container */
+        .animation-container {
+            position: relative; width: 90vw; max-width: 600px; aspect-ratio: 5 / 7;
+            max-height: calc(100vh - 2rem); background-image: linear-gradient(to bottom right, #1f2937, #111827);
+            border-radius: 0.75rem; border: 1px solid #374151;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 6%; box-sizing: border-box; overflow: visible;
+            margin-top: 5vh; /* Add some margin for scroll testing */
+            margin-bottom: 5vh;
+        }
+        /* SVG path container */
+        .path-svg-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 1; pointer-events: none;
+        }
+        #debugPathGroup path {
+             stroke: #4b5563; stroke-width: 1; fill: none; stroke-dasharray: 3, 5; opacity: 0.4;
+        }
+        #debug-social-path-twitter, #debug-social-path-facebook,
+        #debug-social-path-linkedin, #debug-social-path-instagram { /* Paths still needed for calculation */
+             stroke: #f0abfc; stroke-width: 1; fill: none; opacity: 0.5;
+        }
+        #debug-orbit-paths path {
+             stroke: #fca5a5; stroke-width: 1; fill: none; opacity: 0.3; stroke-dasharray: 2, 4;
+        }
+        /* Logo columns */
+        .logo-column {
+            display: flex; flex-direction: column; justify-content: space-between;
+            height: 100%; align-items: center; width: 15%;
+            z-index: 10; flex-shrink: 0; box-sizing: border-box;
+        }
+        /* Icon containers (Logos, DB, Cloud) */
+        .icon-container {
+            position: relative; width: clamp(35px, 8vw, 55px); height: clamp(35px, 8vw, 55px);
+            border-radius: 9999px; /* Make circular */
+            display: flex; justify-content: center; align-items: center;
+            color: #d1d5db; /* Default icon/text color */
+            background-color: #374151; /* Default background */
+            border: 1px solid #4b5563;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.2), 0 1px 2px 0 rgba(0, 0, 0, 0.1);
+            flex-shrink: 0; box-sizing: border-box;
+            transition: transform 0.15s ease-out, box-shadow 0.2s ease-in-out, opacity 0.3s ease-out, visibility 0s linear 0.3s;
+            animation: logo-idle-glow 4s infinite alternate ease-in-out;
+            margin-bottom: 1.5em; /* Add space below for label */
+        }
+         /* Remove bottom margin from items positioned by flex in center column */
+         .center-column > .icon-container, .center-column > #db-wrapper {
+             margin-bottom: 0;
+         }
+         /* Keep margin for cloud icon label */
+         #cloud-icon {
+             margin-bottom: 1.5em;
+         }
+        .icon-container:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+            animation-play-state: paused;
+        }
+        .icon-container.logo-active {
+            transform: scale(1.15); box-shadow: 0 0 15px 5px var(--logo-active-glow-color); animation: none;
+        }
+        /* Generic SVG sizing */
+        .icon-container svg {
+            width: 60%; height: 60%;
+            /* Let individual SVGs or specific rules handle fill/stroke */
+        }
+        /* Specific fill/stroke handling */
+        #logo-3 svg, #logo-6 svg, #logo-8 svg { /* Original fill-based icons */
+             fill: currentColor;
+             stroke: none;
+        }
+        #logo-5 svg path:last-child { /* YouTube play button */
+             fill: currentColor;
+        }
+        #logo-7 svg { /* Instagram icon */
+             stroke: currentColor;
+             fill: none;
+             stroke-width: 2; /* Lucide default */
+        }
+        /* Other SVGs default to stroke */
+        #logo-1 svg, #logo-2 svg, #logo-4 svg, #logo-5 svg, #cloud-icon svg,
+        #db-placeholder svg, #approval-checkmark {
+            stroke: currentColor;
+            fill: none;
+        }
+
+        .logo-label {
+            position: absolute; top: 100%; left: 0; width: 100%;
+            margin-top: 4px; font-size: 0.6rem; color: var(--label-color);
+            text-align: center; white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; pointer-events: none;
+        }
+        /* Removed specific logo background colors */
+
+        /* Center column */
+        .center-column {
+            display: flex; flex-direction: column;
+            justify-content: space-between; /* Positions DB at top, Cloud at bottom */
+            align-items: center;
+            height: 100%; /* Match side column height */
+            flex-grow: 1; z-index: 10; flex-shrink: 0; box-sizing: border-box;
+            /* position: relative; Removed */
+            padding: 0;
+        }
+        /* Wrapper for DB and Status Text */
+        #db-wrapper {
+            position: relative; /* Keep relative for status text */
+            display: flex; justify-content: center; align-items: center;
+            width: clamp(35px, 8vw, 55px); height: clamp(35px, 8vw, 55px);
+            flex-shrink: 0;
+            margin-bottom: 0;
+            margin-top: 25%; /* Pushes the DB wrapper down */
+            z-index: 10; /* Ensure DB icon is above stream */
+        }
+        /* Status Text */
+        #status-text {
+            position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+            margin-bottom: 3rem; /* Increased margin (3x) */
+            color: var(--status-text-color);
+            font-family: 'Poppins', sans-serif; /* Changed font */
+            font-size: clamp(1.5rem, 6vw, 2rem); /* Increased font size (approx 2x) */
+            font-weight: 500; text-align: center;
+            width: 150%; /* Wider to accommodate longer text */
+            height: 1.5em; white-space: nowrap; z-index: 11;
+            transition: color 0.3s ease-in-out;
+            display: flex; justify-content: center; align-items: center;
+        }
+        #status-text.typing::after {
+            content: '...'; display: inline-block; vertical-align: bottom;
+            animation: typing-ellipsis 1.2s infinite steps(4, end);
+            overflow: hidden; line-height: 1;
+        }
+        /* DB Placeholder */
+        #db-placeholder {
+             position: relative; color: #93c5fd; background-color: #1f2937; border: 2px solid transparent;
+             transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+             --meter-fill-percent: 0%; overflow: hidden;
+             width: clamp(35px, 8vw, 55px); height: clamp(35px, 8vw, 55px);
+             border-radius: 0.5rem; display: flex; justify-content: center; align-items: center;
+             animation: db-idle-pulse 800ms infinite ease-in-out; /* Default idle animation */
+             animation-play-state: paused;
+             flex-shrink: 0;
+             box-shadow: 0 0 6px 2px rgba(147, 197, 253, 0.1);
+             margin-bottom: 0; /* Removed margin */
+        }
+        #db-placeholder.db-pulsing-green {
+            /* Class is still added, but inline style takes precedence */
+            /* animation: db-approve-pulse 600ms infinite alternate ease-in-out; */
+        }
+        #db-placeholder.db-popping {
+             animation: db-pop-effect var(--db-pop-duration) ease-out forwards; /* Posted pop */
+        }
+        /* Specific DB State Icons */
+        #db-placeholder .db-svg-icon {
+            width: 70%; height: 70%; position: absolute; /* Absolute positioning */
+            top: 50%; left: 50%; transform: translate(-50%, -50%); /* Centering */
+            z-index: 2; stroke-width: 1.5; /* Slightly thicker default */
+            opacity: 0; /* Hidden by default */
+            transition: opacity 0.3s ease-in-out;
+        }
+        #db-placeholder .db-svg-icon.active {
+            opacity: 1; /* Visible when active */
+        }
+        /* Fill meter */
+        #db-placeholder::before {
+            content: ''; position: absolute; inset: 0; background-color: var(--db-glow-color, #93c5fd);
+            z-index: 1; clip-path: inset(calc(100% - var(--meter-fill-percent)) 0 0 0);
+            transition: clip-path 0.3s linear; opacity: 0.75; border-radius: inherit;
+        }
+        /* Approval Checkmark */
+        #approval-checkmark {
+            position: absolute; top: 50%; left: 50%;
+            width: 60%; height: 60%;
+            color: var(--status-approval-color);
+            transform: translate(-50%, -50%) scale(0.5); /* Start small */
+            opacity: 0; /* Start invisible */
+            visibility: hidden; /* Start hidden */
+            z-index: 15; /* Above DB */
+        }
+        #approval-checkmark.checkmark-animate {
+             animation: checkmark-jello var(--checkmark-anim-duration) ease-out forwards;
+             visibility: visible; /* Make visible for animation */
+        }
+        /* Data Stream Container - Positioned below db-wrapper again */
+        #data-stream-container {
+            position: absolute;
+            top: calc(100% + 3.5rem); /* Increased gap */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9; /* Below DB wrapper */
+            /* Adjusted Size */
+            width: 350%; /* Increased width further */
+            height: 180%; /* Increased height */
+            border: 1px solid #374151;
+            border-radius: 0.375rem;
+            background-color: var(--stream-bg-color);
+            overflow: hidden; /* Keep overflow hidden */
+            display: none; /* Controlled by JS */
+            opacity: 1;
+        }
+        /* Approval Pulse Overlay */
+        #data-stream-container.stream-pulsing-green-overlay::after {
+            content: '';
+            position: absolute;
+            inset: 0; /* Cover entire container */
+            border-radius: inherit; /* Match container rounding */
+            background-color: var(--stream-approval-pulse-color);
+            opacity: 0;
+            animation: stream-approve-pulse-overlay 0.5s infinite alternate ease-in-out;
+            pointer-events: none; /* Allow interaction with content below */
+            z-index: 3; /* Above content, below side fades */
+        }
+        /* Removed fade-out class as hiding is immediate */
+        /* Fade effect on sides */
+        #data-stream-container::before,
+        #data-stream-container::after {
+            content: ''; position: absolute; top: 0; bottom: 0;
+            width: 15%; pointer-events: none; z-index: 4; /* Above overlay */
+        }
+        #data-stream-container::before { left: 0; background: linear-gradient(to right, #1f2937, transparent); }
+        #data-stream-container::after { right: 0; background: linear-gradient(to left, #1f2937, transparent); }
+        /* Data Stream Content */
+        #data-stream-content {
+            font-family: monospace; font-size: 0.7rem; line-height: 1.5;
+            color: var(--stream-text-color); white-space: pre-wrap; /* Allows wrapping for typed content */
+            text-overflow: clip;
+            overflow: hidden; /* Hide scrollbars */
+            /* Improve scrollbar hiding */
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none;  /* IE and Edge */
+            padding: 0.25em 0.5em;
+            position: absolute; top: 0; /* Fill container */
+            left: 0; right: 0; bottom: 0;
+        }
+        #data-stream-content::-webkit-scrollbar { /* WebKit */
+            display: none;
+        }
+        /* Cloud Icon */
+        #cloud-icon {
+            width: clamp(35px, 8vw, 55px); height: clamp(35px, 8vw, 55px);
+            color: #9ca3af; background-color: #4b5563; border-color: #6b7280;
+            animation: none; box-shadow: 0 0 8px 2px rgba(167, 243, 208, 0);
+            margin-bottom: 1.5em; /* Keep label space */
+            margin-top: auto; /* Push to bottom */
+            z-index: 10; /* Ensure Cloud icon is above stream */
+            /* Initially hidden */
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease-out, visibility 0s linear 0.3s, box-shadow 0.3s ease-in-out;
+        }
+        #cloud-icon.visible { /* Class to make it visible */
+             opacity: 1;
+             visibility: visible;
+             transition-delay: 0s, 0s, 0s; /* Ensure visibility transition is immediate when showing */
+        }
+        #cloud-icon.cloud-pulsing {
+            animation: cloudPulseGlow 1s infinite ease-in-out;
+        }
+        /* Data packet styling */
+        .data-packet, .content-packet {
+            position: absolute; width: clamp(16px, 3.5vw, 22px); height: clamp(16px, 3.5vw, 22px);
+            opacity: 0; pointer-events: none; offset-distance: 0%;
+            z-index: 6;
+            transform: none; offset-path: none; top: 0; left: 0; box-sizing: border-box;
+            --stop-percent: 100%;
+        }
+        .data-packet svg, .content-packet svg { width: 100%; height: 100%; display: block; }
+        .data-packet svg path, .content-packet svg path { stroke: rgba(255, 255, 255, 0.3); stroke-width: 0.5px; }
+        /* Shadow Packet Styling */
+        .data-packet-shadow, .content-packet-shadow {
+            position: absolute; width: clamp(16px, 3.5vw, 22px); height: clamp(16px, 3.5vw, 22px);
+            pointer-events: none; offset-distance: 0%;
+            z-index: 5;
+            offset-path: none; top: 0; left: 0; box-sizing: border-box;
+            --stop-percent: 100%;
+        }
+        .data-packet-shadow svg, .content-packet-shadow svg { width: 100%; height: 100%; display: block; }
+        .data-packet-shadow svg path, .content-packet-shadow svg path { stroke: none; stroke-width: 0; }
+         /* Trail particle styling */
+        .particle {
+            position: absolute;
+            width: clamp(6px, 1.5vw, 9px); height: clamp(6px, 1.5vw, 9px);
+            border-radius: 50%; pointer-events: none; offset-distance: 0%; z-index: 4;
+            offset-path: none; top: 0; left: 0; box-sizing: border-box; --stop-percent: 100%;
+            filter: blur(1.5px);
+        }
+         /* Social Packet Styling */
+        .social-packet {
+            position: absolute; width: clamp(20px, 4vw, 28px); height: clamp(20px, 4vw, 28px);
+            color: var(--social-icon-color); opacity: 0; pointer-events: none;
+            offset-distance: 0%; z-index: 12; transform: scale(0.8);
+            offset-path: none; top: 0; left: 0; box-sizing: border-box;
+            filter: drop-shadow(0 0 5px rgba(229, 231, 235, 0.5));
+        }
+        .social-packet svg { width: 100%; height: 100%; display: block; }
+        /* Confetti Particle Styling */
+        .confetti-particle {
+            position: absolute;
+            width: 8px;
+            height: 12px;
+            opacity: 1;
+            border-radius: 2px;
+            pointer-events: none;
+            z-index: 20; /* Above most elements */
+            /* Animation applied via JS */
+        }
+
+        /* Animation classes */
+        .animate-packet {
+            offset-rotate: 0deg;
+            animation: sendPacket var(--packet-duration, 2500ms) ease-out forwards;
+        }
+        .animate-content-packet-orbit {
+            offset-rotate: auto; /* Rotate with path */
+            animation: orbitPacket var(--content-creation-orbit-duration, 2000ms) linear forwards; /* Use CSS var */
+        }
+        .animate-trail-particle {
+             offset-rotate: 0deg;
+             animation:
+                sendParticle var(--packet-duration, 2500ms) linear forwards,
+                fadeParticle var(--packet-duration, 2500ms) ease-out forwards;
+        }
+        .animate-orbit-particle {
+             offset-rotate: auto;
+             animation:
+                orbitParticle var(--content-creation-orbit-duration, 2000ms) linear forwards, /* Use CSS var */
+                fadeParticle var(--content-creation-orbit-duration, 2000ms) ease-out forwards; /* Use CSS var */
+        }
+        .animate-social {
+            offset-rotate: 0deg;
+            animation: sendSocial 1800ms ease-in-out forwards;
+        }
+        .checkmark-animate { /* Class for checkmark animation */
+             animation: checkmark-jello var(--checkmark-anim-duration) ease-out forwards;
+             visibility: visible; /* Ensure visible during anim */
+        }
+        .animate-confetti { /* Class for confetti animation */
+            animation: confetti-burst var(--confetti-duration) ease-out forwards;
+        }
+        /* Keyframes Definitions */
+        @keyframes sendPacket {
+            0% { offset-distance: 0%; opacity: inherit; transform: inherit; }
+            15% { transform: scale(1); }
+            85% { opacity: inherit; transform: scale(1); }
+            100% { offset-distance: var(--stop-percent); opacity: 0; transform: scale(0.8); }
+        }
+        @keyframes orbitPacket {
+            0% { offset-distance: 0%; opacity: 1; transform: scale(1); }
+            95% { opacity: 1; transform: scale(1); }
+            100% { offset-distance: 100%; opacity: 0; transform: scale(0.5); }
+        }
+         @keyframes sendParticle {
+            0% { offset-distance: 0%; }
+            100% { offset-distance: var(--stop-percent); }
+        }
+         @keyframes orbitParticle {
+            0% { offset-distance: 0%; }
+            100% { offset-distance: 100%; }
+        }
+        @keyframes fadeParticle {
+             from { opacity: inherit; } to { opacity: 0; }
+        }
+        @keyframes logo-idle-glow {
+            from { box-shadow: 0 0 6px 1px rgba(209, 213, 219, 0.08); }
+            to { box-shadow: 0 0 10px 3px rgba(209, 213, 219, 0.12); }
+        }
+         @keyframes db-idle-pulse {
+             0%, 100% { box-shadow: 0 0 6px 2px rgba(147, 197, 253, 0.1); }
+             50% { box-shadow: 0 0 16px 6px var(--db-pulse-glow-color, #93c5fd); }
+         }
+         @keyframes db-approve-pulse { /* Green pulse for DB - Brighter */
+             0%, 100% { box-shadow: 0 0 12px 5px rgba(16, 185, 129, 0.5); }
+             50% { box-shadow: 0 0 25px 10px var(--db-approval-pulse-color); }
+         }
+         @keyframes db-pop-effect { /* Pop effect for Posted */
+            0% { transform: scale(1); box-shadow: 0 0 6px 2px rgba(147, 197, 253, 0.1); }
+            50% { transform: scale(1.25); box-shadow: 0 0 25px 10px var(--db-pop-glow-color); }
+            100% { transform: scale(1); box-shadow: 0 0 6px 2px rgba(147, 197, 253, 0.1); }
+         }
+         @keyframes sendSocial {
+             0% { offset-distance: 0%; opacity: 1; transform: scale(0.8); }
+             20% { transform: scale(1); }
+             80% { opacity: 1; transform: scale(1); }
+             100% { offset-distance: 100%; opacity: 0; transform: scale(0.7); }
+         }
+         @keyframes cloudPulseGlow {
+             0%, 100% { box-shadow: 0 0 8px 2px rgba(167, 243, 208, 0.3); }
+             50% { box-shadow: 0 0 20px 8px var(--cloud-glow-color); }
+         }
+         @keyframes typing-ellipsis {
+            0% { content: '\a0'; } /* Non-breaking space */
+            25% { content: '.'; }
+            50% { content: '..'; }
+            75% { content: '...'; }
+            100% { content: '...'; }
+         }
+         @keyframes stream-scroll { /* Used for random data */
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-1.5em); } /* Scroll up one line height */
+         }
+         @keyframes stream-pulse { /* Used for random data */
+            0%, 100% { opacity: 0.8; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.01); }
+         }
+         @keyframes stream-approve-pulse-overlay { /* Green overlay pulse for approval */
+            0%, 100% { opacity: 0; }
+            50% { opacity: 0.6; } /* Increased opacity */
+         }
+         @keyframes checkmark-jello { /* Jello effect for checkmark */
+             0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+             40% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+             60% { transform: translate(-50%, -50%) scale(0.9); }
+             80% { transform: translate(-50%, -50%) scale(1.05); }
+             100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+         }
+         @keyframes confetti-burst { /* Confetti animation */
+            0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+            100% { transform: translate(var(--confetti-x), var(--confetti-y)) rotate(var(--confetti-rot)); opacity: 0; }
+         }
+         /* Fade out handled by opacity transition on the container */
+    </style>
+</head>
+<body>
+    <div class="animation-container" id="animationContainer">
+        <svg class="path-svg-container" id="pathSvg">
+             <g id="debugPathGroup">
+                <path id="debug-path-1" d="M0 0" /> <path id="debug-path-2" d="M0 0" /> <path id="debug-path-3" d="M0 0" /> <path id="debug-path-4" d="M0 0" />
+                <path id="debug-path-5" d="M0 0" /> <path id="debug-path-6" d="M0 0" /> <path id="debug-path-7" d="M0 0" /> <path id="debug-path-8" d="M0 0" />
+                <path id="debug-social-path-twitter" d="M0 0" />
+                <path id="debug-social-path-facebook" d="M0 0" />
+                <path id="debug-social-path-linkedin" d="M0 0" /> <path id="debug-social-path-instagram" d="M0 0" /> </g>
+             <g id="debug-orbit-paths">
+                 <path id="debug-orbit-path-0" d="M0 0" /> <path id="debug-orbit-path-1" d="M0 0" />
+                 <path id="debug-orbit-path-2" d="M0 0" /> <path id="debug-orbit-path-3" d="M0 0" />
+             </g>
+        </svg>
+
+        <div class="logo-column">
+            <div class="icon-container" id="logo-1">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"> <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /> </svg>
+                <span class="logo-label">Search</span>
+            </div>
+            <div class="icon-container" id="logo-2">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"> <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.175 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" /> </svg>
+                <span class="logo-label">URL</span>
+            </div>
+            <div class="icon-container" id="logo-3">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 16"> <path d="M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-3-8.5a1 1 0 0 1 1-1c5.523 0 10 4.477 10 10a1 1 0 1 1-2 0 8 8 0 0 0-8-8 1 1 0 0 1-1-1zm0 4a1 1 0 0 1 1-1 6 6 0 0 1 6 6 1 1 0 1 1-2 0 4 4 0 0 0-4-4 1 1 0 0 1-1-1z"/> </svg>
+                <span class="logo-label">RSS</span>
+            </div>
+            <div class="icon-container" id="logo-4">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"> <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" /> </svg>
+                <span class="logo-label">API</span>
+            </div>
+        </div>
+
+        <div class="center-column">
+             <div id="db-wrapper">
+                 <div id="status-text">...</div> <div class="icon-container" id="db-placeholder">
+                     <svg class="db-svg-icon" id="db-svg-filling" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                         <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                         <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                         <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                     </svg>
+                     <svg class="db-svg-icon" id="db-svg-analyzing" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m5.231 13.481L15 17.25m-4.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Zm3.75 14.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
+                     </svg>
+                     <svg class="db-svg-icon" id="db-svg-content-creation" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                         <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                     </svg>
+                      <svg class="db-svg-icon" id="db-svg-approval" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                         <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 0 1 7.5 5.25h9a2.25 2.25 0 0 1 2.25 2.25v9a2.25 2.25 0 0 1-2.25 2.25h-9a2.25 2.25 0 0 1-2.25-2.25v-9Z" />
+                      </svg>
+                      <svg class="db-svg-icon" id="db-svg-publishing" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0 0a2.25 2.25 0 1 0 3.935 2.186 2.25 2.25 0 0 0-3.935-2.186Zm0-12.814a2.25 2.25 0 1 0 3.933-2.185 2.25 2.25 0 0 0-3.933 2.185Z" />
+                     </svg>
+                     <svg class="db-svg-icon" id="db-svg-posted" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                       <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.33-2.13 3.75 3.75 0 0 1 3.75 5.25m-18 3.75h16.5" />
+                     </svg>
+
+                     <svg id="approval-checkmark" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3.5" stroke="currentColor">
+                         <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                     </svg>
+                 </div>
+                 <div id="data-stream-container">
+                     <pre id="data-stream-content"></pre>
+                 </div>
+             </div>
+             <div class="icon-container" id="cloud-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15a4.5 4.5 0 0 0 4.5 4.5H18a3.75 3.75 0 0 0 1.332-7.257 3 3 0 0 0-2.66-2.512 3 3 0 0 0-3.75 0 3 3 0 0 0-3.75 0A3.75 3.75 0 0 0 4.5 19.5H18a4.5 4.5 0 0 0 4.5-4.5c0-2.176-1.58-4.01-3.686-4.418a4.504 4.504 0 0 0-8.632 0C4.706 10.988 2.25 13.134 2.25 15Z" />
+                </svg>
+                <span class="logo-label">Internet</span>
+            </div>
+        </div>
+
+        <div class="logo-column">
+             <div class="icon-container" id="logo-5">
+                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"/>
+                    <path d="m10 15 5-3-5-3z"/>
+                 </svg>
+                 <span class="logo-label">YouTube</span>
+             </div>
+             <div class="icon-container" id="logo-6">
+                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"> <path d="M12.6.75h2.454l-5.36 6.142L16 15.25h-4.937l-3.867-5.07-4.425 5.07H.316l5.733-6.57L0 .75h5.063l3.495 4.633L12.601.75Zm-.86 13.028h1.36L4.323 2.145H2.865l8.875 11.633Z"/> </svg>
+                 <span class="logo-label">X</span>
+             </div>
+             <div class="icon-container" id="logo-7">
+                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect width="20" height="20" x="2" y="2" rx="5" ry="5"/>
+                    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+                    <line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/>
+                 </svg>
+                 <span class="logo-label">Instagram</span> </div>
+             <div class="icon-container" id="logo-8">
+                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"> <path d="M16 8.049c0-4.446-3.582-8.05-8-8.05C3.58 0-.002 3.603-.002 8.05c0 4.017 2.926 7.347 6.75 7.951v-5.625h-2.03V8.05H6.75V6.275c0-2.017 1.195-3.131 3.022-3.131.876 0 1.791.157 1.791.157v1.98h-1.009c-.993 0-1.303.621-1.303 1.258v1.51h2.218l-.354 2.326H9.25V16c3.824-.604 6.75-3.934 6.75-7.951z"/> </svg>
+                 <span class="logo-label">Facebook</span>
+             </div>
+             </div>
+    </div>
+
+    <script>
+        // --- Configuration Constants ---
+        const animationDuration = 2500; // Duration for input packets
+        const triggerInterval = 400; // Interval between input packets
+        const logoActiveDuration = 200;
+        const numberOfParticles = 35;
+        const particleDelayIncrement = 3;
+        const packetsNeededToFill = 8; // Changed from 13
+        const numberOfShadows = 3;
+        const shadowDelayIncrement = 100;
+        const socialAnimationDuration = 1800;
+        const cloudPulseDuration = 1500;
+        const dataStreamInterval = 80; // Interval for random data stream
+        const dataStreamMaxLines = 30;
+        // const analysisDuration = 3000; // REMOVED
+        const contentPacketOrbitDuration = 4000; // Increased orbit/phase duration
+        const approvalCheckmarkDuration = 500;
+        const approvalPhaseDuration = 1000;
+        const contentTypingSpeed = 6; // Doubled typing speed again (halved delay)
+        const dbPopDuration = 400; // Duration for DB pop animation
+        const checkmarkAnimDuration = 600; // Duration for checkmark jello animation
+        const confettiParticleCount = 40; // Number of confetti particles
+        const confettiColors = ['#f9a8d4', '#f472b6', '#a78bfa', '#818cf8', '#60a5fa', '#f59e0b', '#fbbf24', '#a3e635', '#4ade80']; // Festive colors
+        const confettiDuration = 1200; // Match CSS animation duration
+
+        // Color Palette
+        const packetColors = ['#ec4899', '#a855f7', '#3b82f6', '#f97316']; // Pink, Purple, Blue, Orange
+        const cloudPulseColors = ['#34d399', '#60a5fa', '#f87171', '#facc15'];
+        const contentCreationColor = '#f59e0b'; // Base color for orbiting packets (overridden)
+
+        // --- Element References ---
+        const container = document.getElementById('animationContainer');
+        const dbElement = document.getElementById('db-placeholder');
+        const cloudIcon = document.getElementById('cloud-icon');
+        const statusTextElement = document.getElementById('status-text');
+        const dataStreamContainer = document.getElementById('data-stream-container');
+        const dataStreamContent = document.getElementById('data-stream-content');
+        // Select input logos (1-8) and output logos (5, 6, 7, 8)
+        const logoElements = Array.from({ length: 8 }, (_, i) => document.getElementById(`logo-${i + 1}`))
+             .concat(Array.from({ length: 4 }, (_, i) => document.getElementById(`logo-${i + 5}`))); // logo-5, logo-6, logo-7, logo-8
+        const debugPathElements = Array.from({ length: 8 }, (_, i) => document.getElementById(`debug-path-${i + 1}`));
+        const debugSocialPathTwitter = document.getElementById('debug-social-path-twitter');
+        const debugSocialPathFacebook = document.getElementById('debug-social-path-facebook');
+        const debugSocialPathLinkedIn = document.getElementById('debug-social-path-linkedin'); // Keep for calculation
+        const debugSocialPathInstagram = document.getElementById('debug-social-path-instagram'); // Keep for calculation
+        const debugOrbitPathElements = Array.from({ length: 4 }, (_, i) => document.getElementById(`debug-orbit-path-${i}`));
+        const dbSvgIcons = { // Map states to SVG element IDs
+            FILLING: document.getElementById('db-svg-filling'),
+            ANALYZING: document.getElementById('db-svg-analyzing'), // Used for ANALYSIS_TEXT state
+            CONTENT_CREATION: document.getElementById('db-svg-content-creation'),
+            APPROVAL: document.getElementById('db-svg-approval'),
+            SENDING_SOCIAL: document.getElementById('db-svg-publishing'),
+            POSTED: document.getElementById('db-svg-posted') // Use the new cloud-check icon
+        };
+        const approvalCheckmark = document.getElementById('approval-checkmark');
+
+        // --- Animation State Variables ---
+        const inputLogoPathOrder = [1, 5, 2, 6, 3, 7, 4, 8];
+        let currentInputLogoIndex = -1;
+        const totalInputLogos = inputLogoPathOrder.length;
+        let animationIntervalId = null; // Input packet interval
+        let calculatedInputPathData = [];
+        let calculatedSocialPathData = {};
+        let calculatedOrbitPathData = [];
+        let currentState = 'INITIALIZING';
+        let packetsReceived = 0;
+        let lastPacketColor = packetColors[0];
+        let continuousPulseColorIntervalId = null;
+        let cloudPulseColorIntervalId = null;
+        let socialIconsFinished = 0;
+        let phaseTimeoutId = null; // Generic timeout for phase durations (Content Creation, Approval, Cloud Pulse)
+        let dbPulseStartTimeoutId = null;
+        let dataStreamIntervalId = null; // Used for random data stream AND typing effect
+        const orbitingPackets = [];
+        let contentTypingTimeoutId = null; // Timeout for character typing
+
+        // Updated Mock Content
+        const mockTweetContent = [
+            "✨ Checking Memory...",
+            "🚀 Extracting relevant content...",
+            "🤖 Creating data report...",
+            "🚀 Processing insights...",
+            "🤖 Comparing previous publishings...",
+            "🚀 Initilize Topic Matrix...",
+            "🤖 Topic Chosen:",
+            "Advancement in AI Visualization Data Processing",
+            "📊 Generating key visualizations...",
+            "✍️ Drafting cross-platform post:",
+            "✨ Exciting AI news update! Today we have discovered a new world changing AI data processing algorithm for visualization. We talk more about it in our blog https://g.com/blog/ai-now-processes-vision-better #AI #Automation",
+            "Content ready for review..."
+        ];
+
+
+        // --- Utility Functions ---
+        function debounce(func, wait) {
+             let timeout;
+             return function executedFunction(...args) {
+                 const later = () => { clearTimeout(timeout); func(...args); };
+                 clearTimeout(timeout);
+                 timeout = setTimeout(later, wait);
+             };
+        }
+        function hexToRgb(hex) {
+            let r = 0, g = 0, b = 0;
+            if (!hex || typeof hex !== 'string') return null;
+            hex = hex.startsWith('#') ? hex.slice(1) : hex;
+            if (hex.length == 3) { hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2]; }
+            if (hex.length == 6) {
+                r = parseInt(hex.substring(0, 2), 16); g = parseInt(hex.substring(2, 4), 16); b = parseInt(hex.substring(4, 6), 16);
+            } else { console.warn("Invalid hex color length:", hex); return null; }
+            if (isNaN(r) || isNaN(g) || isNaN(b)) { console.warn("Invalid hex color characters:", hex); return null; }
+            return { r, g, b };
+        }
+        function generateRandomHtmlLine() { // Used only for initial random stream
+            const tags = ['div', 'span', 'p', 'a', 'li', 'h4', 'img', 'button'];
+            const attributes = ['class="text-sm"', 'id="item-xyz"', 'style="color:#aaa"', 'href="#"', 'src="img.png"'];
+            const content = ['data', 'stream', 'packet', 'info', 'log', 'entry', 'status', 'update', 'process', 'value'];
+            const tag = tags[Math.floor(Math.random() * tags.length)];
+            let line = `&lt;${tag}`;
+            if (Math.random() > 0.3) { line += ` ${attributes[Math.floor(Math.random() * attributes.length)]}`; }
+            line += '&gt;';
+            const wordCount = Math.floor(Math.random() * 4) + 1;
+            for (let i = 0; i < wordCount; i++) { line += content[Math.floor(Math.random() * content.length)] + ' '; }
+            line += `&lt;/${tag}&gt;`;
+            return line.trim();
+        }
+
+        // --- State Management & UI Updates ---
+        function updateStatusText(text, stateKey, animateEllipsis = false) {
+            if (!statusTextElement) return;
+            statusTextElement.textContent = text;
+            let colorVar = '--status-text-color';
+            switch (stateKey) {
+                case 'ANALYZING':        colorVar = '--status-analyzing-color'; break;
+                case 'CONTENT_CREATION': colorVar = '--status-analyzing-color'; break; // Blue text
+                case 'APPROVAL':         colorVar = '--status-approval-color'; break;
+                case 'SENDING_SOCIAL':   colorVar = '--status-text-color'; break;
+                case 'POSTED':           colorVar = '--status-posted-color'; break;
+            }
+            statusTextElement.style.color = `var(${colorVar})`;
+            if (animateEllipsis) {
+                statusTextElement.classList.add('typing');
+            } else {
+                statusTextElement.classList.remove('typing');
+            }
+        }
+        // Simplified updateDbIcon
+        function updateDbIcon(state) {
+            console.log(`%cAttempting to set DB icon for state: ${state}`, "color: orange");
+            if (!dbElement) { console.error("DB Element not found in updateDbIcon"); return; }
+
+            // Deactivate all icons first
+            let foundActive = false;
+            Object.values(dbSvgIcons).forEach(icon => {
+                if (icon) {
+                    icon.classList.remove('active');
+                    // console.log(`Deactivated icon: ${icon.id}`);
+                }
+            });
+
+            // Determine the correct icon ID based on the state
+            let iconIdToShow = (state === 'ANALYSIS_TEXT') ? 'ANALYZING' : state;
+            let iconToShow = dbSvgIcons[iconIdToShow];
+
+            // Fallback if the specific icon isn't found
+            if (!iconToShow) {
+                console.warn(`No DB icon found for state: ${iconIdToShow}. Using default (FILLING).`);
+                iconIdToShow = 'FILLING'; // Use the key for the map
+                iconToShow = dbSvgIcons[iconIdToShow];
+            }
+
+            // Activate the selected icon
+            if (iconToShow) {
+                iconToShow.classList.add('active');
+                 console.log(`%cDB Icon set to: ${iconToShow.id}`, "color: cyan");
+            } else {
+                // This should ideally not happen if FILLING icon exists
+                console.error(`Critical Error: Fallback DB icon (FILLING) with ID 'db-svg-filling' not found!`);
+            }
+        }
+        // --- Main State Machine Logic ---
+        function changeState(newState) {
+            console.log(`%cChanging state from ${currentState} to ${newState}`, "color: yellow;");
+            const previousState = currentState;
+            currentState = newState; // Update global state first
+
+            // FIX: Update DB Icon based on the *new* state immediately
+            updateDbIcon(currentState);
+
+            // --- Clear Timeouts Specific to Previous State ---
+            // Clear generic phase timer if we move away prematurely
+            if (phaseTimeoutId) {
+                 const intendedTransition = (previousState === 'ANALYSIS_TEXT' && newState === 'CONTENT_CREATION') ||
+                                           (previousState === 'CONTENT_CREATION' && newState === 'APPROVAL') ||
+                                           (previousState === 'APPROVAL' && newState === 'SENDING_SOCIAL') ||
+                                           (previousState === 'POSTED' && newState === 'RESETTING');
+                 if (!intendedTransition) {
+                     console.log(`Clearing phase timeout ${phaseTimeoutId} due to early state change from ${previousState} to ${newState}`);
+                     clearTimeout(phaseTimeoutId);
+                     phaseTimeoutId = null;
+                 }
+            }
+
+
+            // --- Handle Exit Logic for Previous State ---
+            if (previousState === 'APPROVAL') {
+                 if (dataStreamContainer) dataStreamContainer.classList.remove('stream-pulsing-green-overlay');
+                 if (dbElement) dbElement.classList.remove('db-pulsing-green'); // Stop DB green pulse
+                 if (approvalCheckmark) approvalCheckmark.classList.remove('checkmark-animate'); // Remove animation class
+                 if(dbElement) dbElement.style.animation = ''; // Clear specific animation
+            }
+            // REMOVED stopDataStream call from ANALYSIS_TEXT exit logic
+            if (previousState === 'CONTENT_CREATION') {
+                 if (contentTypingTimeoutId) clearTimeout(contentTypingTimeoutId); // Stop typing
+                 contentTypingTimeoutId = null;
+            }
+            if (previousState === 'POSTED') {
+                 if (dbElement) dbElement.classList.remove('db-popping'); // Ensure pop class is removed
+            }
+
+
+            // --- Handle Entry Logic for New State ---
+            let currentPhaseTimeout = null; // Holder for timeouts set in this switch
+
+            switch (newState) {
+                case 'FILLING':
+                    resetCycleVisuals(); // Resets DB animation among other things
+                    startFillingPhase();
+                    break;
+                case 'ANALYSIS_TEXT':
+                     updateStatusText('Analyzing', 'ANALYZING', true);
+                     // updateDbIcon('ANALYZING'); // Called above
+                     startDataStream(true); // Start random stream
+                     // Transition logic is handled in handlePacketArrival (for meter) and animationend (for state change)
+                    break;
+                case 'CONTENT_CREATION':
+                    updateStatusText('Content Creation', 'CONTENT_CREATION', true);
+                    // updateDbIcon('CONTENT_CREATION'); // Called above
+                    startContentCreationPhase(); // Starts orbits and typing
+                    // Set timeout for this phase (now uses longer orbit duration)
+                    currentPhaseTimeout = setTimeout(() => {
+                        if (currentState === 'CONTENT_CREATION') {
+                            if (contentTypingTimeoutId) clearTimeout(contentTypingTimeoutId); // Ensure typing stops
+                            changeState('APPROVAL');
+                        }
+                    }, contentPacketOrbitDuration + 500); // Wait for orbit + buffer
+                    break;
+                case 'APPROVAL':
+                    updateStatusText('Approval', 'APPROVAL', false);
+                    // updateDbIcon('APPROVAL'); // Called above
+                    startApprovalPhase(); // Starts checkmark and pulse
+                    // Set timeout for this phase
+                    currentPhaseTimeout = setTimeout(() => {
+                        if (currentState === 'APPROVAL') {
+                            changeState('SENDING_SOCIAL');
+                        }
+                    }, approvalPhaseDuration);
+                    break;
+                case 'SENDING_SOCIAL':
+                    updateStatusText('Publishing', 'SENDING_SOCIAL', true);
+                    // updateDbIcon('SENDING_SOCIAL'); // Called above
+                    startSocialSendingPhase(); // Starts social icons and stream fade
+                    // Completion handled by social icon animations -> triggerCloudEffect
+                    break;
+                case 'POSTED':
+                    updateStatusText('Posted', 'POSTED', false);
+                    // updateDbIcon('POSTED'); // Called above (shows new posted icon)
+                    triggerDbPopEffect(); // Trigger DB pop animation
+                    triggerConfettiEffect(); // Trigger Confetti
+                    // Set timeout for cloud pulse duration before resetting
+                    currentPhaseTimeout = setTimeout(() => {
+                         if (cloudIcon) {
+                             cloudIcon.classList.remove('cloud-pulsing');
+                              cloudIcon.style.removeProperty('--cloud-glow-color');
+                         }
+                         if (cloudPulseColorIntervalId) clearInterval(cloudPulseColorIntervalId);
+                         cloudPulseColorIntervalId = null;
+                         if (currentState === 'POSTED') { // Check state before resetting
+                             changeState('RESETTING');
+                         }
+                    }, cloudPulseDuration);
+                    break;
+                case 'RESETTING':
+                     console.log("Resetting cycle...");
+                     resetFullCycle(); // Cleans up everything and transitions to FILLING
+                     break;
+            }
+
+            // Store the timeout ID set during this state entry, if any
+            if (currentPhaseTimeout) {
+                 phaseTimeoutId = currentPhaseTimeout; // Store the ID
+                 console.log(`Timeout set for state ${newState} with ID: ${phaseTimeoutId}`);
+            }
+        }
+
+
+        // --- Path Calculation Functions ---
+        function calculateAllPaths() {
+            console.log("Calculating ALL animation paths...");
+            calculateInputLogoPaths(); // Uses the same logic as provided code
+            calculateSocialPaths(); // Updated for 4 icons
+            calculateOrbitPaths(); // Adjusted radius
+            console.log("All paths recalculated.");
+        }
+        // This function calculates paths identical to the user-provided 'calculateLogoPaths'
+        function calculateInputLogoPaths() {
+             console.log("Calculating input logo animation paths (S-curve)...");
+             calculatedInputPathData = [];
+             const typicalPacketWidth = Math.max(16, Math.min(container.clientWidth * 0.035, 22));
+             const packetHalfWidth = typicalPacketWidth / 2;
+             if (!container || !dbElement || logoElements.slice(0, 8).some(el => !el)) { console.error("Missing elements for input path calculation."); return; }
+             const containerRect = container.getBoundingClientRect();
+             const dbRect = dbElement.getBoundingClientRect();
+             const dbRelativeTop = dbRect.top - containerRect.top;
+             const dbRelativeLeft = dbRect.left - containerRect.left;
+             const dbVerticalCenterY = dbRelativeTop + dbRect.height / 2;
+             const dbLeftEdgeX = dbRelativeLeft;
+             const dbRightEdgeX = dbRelativeLeft + dbRect.width;
+             const endpointOffsetFactor = 0.3;
+             const endpointOffsetValue = dbRect.width * endpointOffsetFactor;
+
+             logoElements.slice(0, 8).forEach((logo, index) => {
+                  if (!logo) return;
+                 const logoRect = logo.getBoundingClientRect();
+                 const isLeftSide = index < 4;
+                 const isTopHalf = (index < 2) || (index >= 4 && index < 6);
+                 let startX;
+                 const startY = (logoRect.top + logoRect.height / 2) - containerRect.top;
+                 if (isLeftSide) { startX = (logoRect.left + logoRect.width) - containerRect.left; } else { startX = logoRect.left - containerRect.left; }
+                 let targetEndX;
+                 const targetEndY = dbVerticalCenterY;
+                 if (isLeftSide) { targetEndX = dbLeftEdgeX; } else { targetEndX = dbRightEdgeX; }
+                 let finalEndX;
+                 const finalEndY = targetEndY;
+                 if (isLeftSide) { finalEndX = targetEndX - endpointOffsetValue; } else { finalEndX = targetEndX + endpointOffsetValue; }
+                 const deltaX = finalEndX - startX;
+                 const deltaY = finalEndY - startY;
+                 const distance = Math.max(1, Math.sqrt(deltaX * deltaX + deltaY * deltaY));
+                 const midX = startX + deltaX * 0.5;
+                 const midY = startY + deltaY * 0.5;
+                 const normX = deltaX / distance;
+                 const normY = deltaY / distance;
+                 const perpX = -normY;
+                 const perpY = normX;
+                 // Constants from provided logic
+                 const perpendicularMagnitudeFactor = 0.18;
+                 const arrivalHorizontalFactor = 0.5;
+                 const perpendicularMagnitude = containerRect.width * perpendicularMagnitudeFactor;
+                 const forwardMagnitude = (distance / 2) * 0.25;
+                 let cp1X, cp1Y, cp2X, cp2Y, cp3X, cp3Y;
+                 const sideMultiplier = isLeftSide ? 1 : -1;
+                 const verticalMultiplier = isTopHalf ? 1 : -1;
+                 const perpOffsetX = perpX * perpendicularMagnitude * sideMultiplier * verticalMultiplier;
+                 const perpOffsetY = perpY * perpendicularMagnitude * sideMultiplier * verticalMultiplier;
+                 cp1X = startX + normX * forwardMagnitude + perpOffsetX;
+                 cp1Y = startY + normY * forwardMagnitude - perpOffsetY;
+                 cp2X = midX - normX * forwardMagnitude - perpOffsetX;
+                 cp2Y = midY - normY * forwardMagnitude + perpOffsetY;
+                 cp3Y = finalEndY;
+                 const arrivalHorizontalOffset = Math.abs(finalEndX - midX) * arrivalHorizontalFactor;
+                 cp3X = isLeftSide ? (finalEndX + arrivalHorizontalOffset) : (finalEndX - arrivalHorizontalOffset);
+                 const pathDataForSVG = `M ${startX.toFixed(2)} ${startY.toFixed(2)} C ${cp1X.toFixed(2)} ${cp1Y.toFixed(2)}, ${cp2X.toFixed(2)} ${cp2Y.toFixed(2)}, ${midX.toFixed(2)} ${midY.toFixed(2)} S ${cp3X.toFixed(2)} ${cp3Y.toFixed(2)}, ${finalEndX.toFixed(2)} ${finalEndY.toFixed(2)}`;
+                 const pathDataForCSS = `path("${pathDataForSVG}")`;
+                 let stopPercent = 100;
+                 const stopY = targetEndY;
+                 let stopX; if (isLeftSide) { stopX = targetEndX + packetHalfWidth; } else { stopX = targetEndX - packetHalfWidth; }
+                 const debugPathElement = debugPathElements[index];
+                 if (debugPathElement && typeof debugPathElement.getTotalLength === 'function') {
+                     debugPathElement.setAttribute('d', pathDataForSVG);
+                     const totalLength = debugPathElement.getTotalLength();
+                     if (totalLength > 0) {
+                         let bestLength = totalLength; let minDistSq = Infinity; const steps = 200;
+                         for (let i = 0; i <= steps; i++) {
+                             const currentLength = (i / steps) * totalLength;
+                             const point = debugPathElement.getPointAtLength(currentLength);
+                             const distSq = Math.pow(point.x - stopX, 2) + Math.pow(point.y - stopY, 2);
+                             if (distSq < minDistSq) { minDistSq = distSq; bestLength = currentLength; }
+                         }
+                         stopPercent = Math.max(0, Math.min(100, (bestLength / totalLength) * 100));
+                     }
+                 } else { console.warn(`Could not measure path for index ${index}. Using default stopPercent.`); }
+                 calculatedInputPathData[index] = { pathString: pathDataForCSS, stopPercent: stopPercent };
+             });
+             console.log("Input logo paths recalculated.");
+        }
+
+        function calculateSocialPaths() {
+            calculatedSocialPathData = {}; // Reset
+            if (!container || !dbElement || !cloudIcon) {
+                console.error("Missing elements for social path calculation."); return;
+            }
+            const containerRect = container.getBoundingClientRect();
+            const dbRect = dbElement.getBoundingClientRect();
+            const cloudRect = cloudIcon.getBoundingClientRect();
+            const startX = (dbRect.left + dbRect.width / 2) - containerRect.left;
+            const startY = dbRect.bottom - containerRect.top;
+            const endX = (cloudRect.left + cloudRect.width / 2) - containerRect.left;
+            const endY = cloudRect.top - containerRect.top;
+            const midY = startY + (endY - startY) / 2;
+            const curveFactorBase = 0.2 * containerRect.width;
+
+            // Define offsets for the 4 social icons
+            const offsets = {
+                twitter: curveFactorBase,       // Right curve
+                facebook: -curveFactorBase,     // Left curve
+                linkedin: curveFactorBase * 0.5, // Inner right curve
+                instagram: -curveFactorBase * 0.5 // Inner left curve
+            };
+            const socialTypes = ['twitter', 'facebook', 'linkedin', 'instagram']; // Updated list
+            const debugElements = {
+                twitter: debugSocialPathTwitter,
+                facebook: debugSocialPathFacebook,
+                linkedin: debugSocialPathLinkedIn, // Added
+                instagram: debugSocialPathInstagram // Added
+            };
+
+            socialTypes.forEach(type => {
+                const curveFactor = offsets[type];
+                const cp1X = startX + curveFactor;
+                const cp1Y = startY + (midY - startY) * 0.3;
+                const cp2X = endX + curveFactor;
+                const cp2Y = endY - (endY - midY) * 0.3;
+                const pathData = `M ${startX.toFixed(2)} ${startY.toFixed(2)} C ${cp1X.toFixed(2)} ${cp1Y.toFixed(2)}, ${cp2X.toFixed(2)} ${cp2Y.toFixed(2)}, ${endX.toFixed(2)} ${endY.toFixed(2)}`;
+                calculatedSocialPathData[type] = `path("${pathData}")`;
+                const debugEl = debugElements[type];
+                if (debugEl) debugEl.setAttribute('d', pathData);
+            });
+        }
+        function calculateOrbitPaths() {
+            calculatedOrbitPathData = [];
+            if (!container || !dbElement) {
+                 console.error("Missing elements for orbit path calculation."); return;
+            }
+            const containerRect = container.getBoundingClientRect();
+            const dbRect = dbElement.getBoundingClientRect();
+            const dbCenterX = (dbRect.left + dbRect.width / 2) - containerRect.left;
+            const dbCenterY = (dbRect.top + dbRect.height / 2) - containerRect.top;
+            // Adjusted Orbit Radius
+            const initialRadius = dbRect.width * 1.0; // Start closer
+            const finalRadius = dbRect.width * 0.5; // End closer
+            const numOrbits = 2.5;
+
+            for (let i = 0; i < 4; i++) {
+                const angle = (i * Math.PI / 2) + (Math.PI / 4);
+                const startOffsetX = Math.cos(angle) * dbRect.width * 0.6;
+                const startOffsetY = Math.sin(angle) * dbRect.height * 0.6;
+                const startX = dbCenterX + startOffsetX;
+                const startY = dbCenterY + startOffsetY;
+                let pathD = `M ${startX.toFixed(2)} ${startY.toFixed(2)}`;
+                const pointsPerOrbit = 50;
+                const totalPoints = Math.floor(pointsPerOrbit * numOrbits);
+                for (let j = 1; j <= totalPoints; j++) {
+                    const progress = j / totalPoints;
+                    const currentAngle = angle + progress * numOrbits * 2 * Math.PI;
+                    const currentRadius = initialRadius + (finalRadius - initialRadius) * Math.pow(progress, 1.5);
+                    const x = dbCenterX + Math.cos(currentAngle) * currentRadius;
+                    const y = dbCenterY + Math.sin(currentAngle) * currentRadius;
+                    pathD += ` L ${x.toFixed(2)} ${y.toFixed(2)}`;
+                }
+                calculatedOrbitPathData[i] = `path("${pathD}")`;
+                if (debugOrbitPathElements[i]) {
+                    debugOrbitPathElements[i].setAttribute('d', pathD);
+                }
+            }
+             console.log("Orbit paths recalculated (smaller radius).");
+        }
+
+        // --- Animation Trigger Functions ---
+        function triggerInputPacketAnimation() {
+             // FIX: Allow packets to send during FILLING and ANALYSIS_TEXT phases
+             if (currentState !== 'FILLING' && currentState !== 'ANALYSIS_TEXT') {
+                 console.log(`triggerInputPacketAnimation skipped: currentState is ${currentState}`);
+                 return;
+             }
+             if (calculatedInputPathData.length === 0) { console.warn("Input paths not calculated yet."); return; }
+
+             currentInputLogoIndex = (currentInputLogoIndex + 1) % totalInputLogos;
+             const pathNumber = inputLogoPathOrder[currentInputLogoIndex];
+             const pathIndex = pathNumber - 1;
+             const pathInfo = calculatedInputPathData[pathIndex];
+             const originatingLogo = logoElements[pathIndex];
+
+             if (!pathInfo || !pathInfo.pathString || !originatingLogo) { console.error(`Input path data missing for index ${pathIndex}`); return; }
+
+             const randomColor = packetColors[Math.floor(Math.random() * packetColors.length)];
+             lastPacketColor = randomColor;
+
+             const nextPacketNum = packetsReceived + 1;
+             const arrivalTime = animationDuration * pathInfo.stopPercent / 100; // Used only for DB pulse start now
+
+             // --- Handle First Packet Sent ---
+             if (nextPacketNum === 1) {
+                 // Schedule DB Pulse Start when packet visually arrives
+                 if (dbPulseStartTimeoutId) clearTimeout(dbPulseStartTimeoutId);
+                 dbPulseStartTimeoutId = setTimeout(() => {
+                     // Check state before starting pulse
+                     if (dbElement && (currentState === 'FILLING' || currentState === 'ANALYSIS_TEXT')) {
+                         dbElement.style.animationPlayState = 'running';
+                         console.log("DB Pulse animation started.");
+                     }
+                 }, arrivalTime);
+                 // NOTE: State change to ANALYSIS_TEXT happens in handlePacketArrival
+             }
+
+             // --- Handle Last Packet Sent ---
+             if (nextPacketNum === packetsNeededToFill) { // Check against new value (8)
+                 console.log(`Sending final packet (${nextPacketNum}).`);
+                 if (animationIntervalId) { clearInterval(animationIntervalId); animationIntervalId = null; }
+                 console.log("Stopped input packet interval.");
+                 // Transition to CONTENT_CREATION is handled via animationend callback
+             } else if (nextPacketNum > packetsNeededToFill) {
+                 console.warn("Attempted to send packet after meter should be full."); return;
+             }
+
+             // --- Create and Animate Packet Elements ---
+             // Define the callback for the *last* packet's animation end
+             let animationEndCallback = null;
+             if (nextPacketNum === packetsNeededToFill) {
+                 animationEndCallback = () => {
+                     console.log("Last packet animation finished. Current state:", currentState);
+                     // Ensure meter is visually 100% (may already be set by handlePacketArrival)
+                     if(dbElement) dbElement.style.setProperty('--meter-fill-percent', `100%`);
+
+                     // Transition if we are in the expected state
+                     if (currentState === 'ANALYSIS_TEXT') {
+                         console.log("Transitioning to CONTENT_CREATION via animation end.");
+                         changeState('CONTENT_CREATION');
+                     } else {
+                         console.warn("Last packet animation ended, but state was not ANALYSIS_TEXT. State:", currentState);
+                     }
+                 };
+             }
+
+             createAndAnimateVisualPacket(
+                 pathInfo,
+                 randomColor,
+                 animationDuration,
+                 'data-packet',
+                 'data-packet-shadow',
+                 'animate-packet',
+                 'animate-trail-particle',
+                 false, // isOrbiting
+                 animationEndCallback // Pass the callback only for the last packet
+             );
+
+
+             // --- Trigger Originating Logo Pulse ---
+             originatingLogo.classList.add('logo-active');
+             originatingLogo.style.setProperty('--logo-active-glow-color', `rgba(${hexToRgb(randomColor).r}, ${hexToRgb(randomColor).g}, ${hexToRgb(randomColor).b}, 0.5)`);
+             setTimeout(() => {
+                 originatingLogo.classList.remove('logo-active');
+                 originatingLogo.style.removeProperty('--logo-active-glow-color');
+             }, logoActiveDuration);
+
+             packetsReceived++;
+
+             // --- Schedule Meter Update on Arrival ---
+             // This timeout is only for updating the meter fill visually
+             setTimeout(() => {
+                 handlePacketArrival(nextPacketNum);
+             }, arrivalTime);
+        }
+
+        // Modified createAndAnimateVisualPacket to accept callback
+        function createAndAnimateVisualPacket(pathInfo, color, duration, packetClass, shadowClass, packetAnimClass, particleAnimClass, isOrbiting = false, onAnimationEndCallback = null) {
+            const newPacket = document.createElement('div');
+            newPacket.classList.add(packetClass);
+            newPacket.innerHTML = ` <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 16"> <path d="M4 0h5.293A1 1 0 0 1 10 .293L13.707 4a1 1 0 0 1 .293.707V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2zm5.5 1.5v2.793a1 1 0 0 0 1 1H13v-.5L9.5 1.5z"/> <path fill-rule="evenodd" d="M4 7h8v1H4V7zm0 2h8v1H4V9zm0 2h5v1H4v-1z"/> </svg> `;
+            newPacket.style.color = color;
+            newPacket.style.setProperty('--packet-glow-color', color);
+            newPacket.style.opacity = '1';
+            newPacket.style.transform = 'scale(0.8)';
+
+            // Add the event listener with the callback
+            newPacket.addEventListener('animationend', (event) => {
+                // Ensure the event is for the main packet itself, not children/shadows if event bubbles
+                 if (event.target === newPacket) {
+                     if (onAnimationEndCallback && typeof onAnimationEndCallback === 'function') {
+                         onAnimationEndCallback(); // Execute the callback if provided
+                     }
+                     newPacket.remove(); // Original removal logic
+                     if (isOrbiting) {
+                         const index = orbitingPackets.indexOf(newPacket);
+                         if (index > -1) orbitingPackets.splice(index, 1);
+                     }
+                 }
+            }, { once: true });
+
+            container.appendChild(newPacket);
+            if (isOrbiting) orbitingPackets.push(newPacket);
+
+            requestAnimationFrame(() => {
+                newPacket.style.offsetPath = pathInfo.pathString;
+                newPacket.style.setProperty('--stop-percent', `${pathInfo.stopPercent}%`);
+                newPacket.style.animationDuration = `${duration}ms`;
+                requestAnimationFrame(() => newPacket.classList.add(packetAnimClass));
+            });
+
+            // --- Shadow/Particle creation remains the same ---
+            const shadowOpacities = [0.25, 0.15, 0.05];
+            for (let j = 0; j < numberOfShadows; j++) {
+                if (j >= shadowOpacities.length) break;
+                const shadowPacket = document.createElement('div');
+                shadowPacket.classList.add(shadowClass);
+                shadowPacket.innerHTML = newPacket.innerHTML;
+                const rgbColor = hexToRgb(color);
+                const shadowOpacity = shadowOpacities[j];
+                if (rgbColor) {
+                    shadowPacket.style.color = `rgba(${rgbColor.r}, ${rgbColor.g}, ${rgbColor.b}, ${shadowOpacity})`;
+                    shadowPacket.style.filter = `blur(${(1 + j * 0.3).toFixed(1)}px) drop-shadow(0 0 1px rgba(${rgbColor.r},${rgbColor.g},${rgbColor.b},${shadowOpacity * 0.7}))`;
+                } else {
+                     shadowPacket.style.color = color;
+                     shadowPacket.style.opacity = shadowOpacity;
+                     shadowPacket.style.filter = `blur(${(1 + j * 0.3).toFixed(1)}px) drop-shadow(0 0 2px var(--packet-glow-color, #f97316))`;
+                }
+                shadowPacket.style.setProperty('--packet-glow-color', color);
+                shadowPacket.style.position = 'absolute';
+                const shadowScale = (1 - (j + 1) * 0.05).toFixed(2);
+                shadowPacket.style.transform = `scale(${shadowScale})`;
+                shadowPacket.addEventListener('animationend', () => shadowPacket.remove(), { once: true });
+                container.appendChild(shadowPacket);
+                const shadowDelay = (j + 1) * shadowDelayIncrement;
+                requestAnimationFrame(() => {
+                    shadowPacket.style.offsetPath = pathInfo.pathString;
+                    shadowPacket.style.setProperty('--stop-percent', `${pathInfo.stopPercent}%`);
+                    shadowPacket.style.animationDelay = `${shadowDelay}ms`;
+                    shadowPacket.style.animationDuration = `${duration}ms`;
+                    requestAnimationFrame(() => { shadowPacket.classList.add(packetAnimClass); });
+                });
+            }
+
+            for (let i = 0; i < numberOfParticles; i++) {
+                const particle = document.createElement('div');
+                particle.classList.add('particle');
+                particle.style.backgroundColor = color;
+                const scale = Math.max(0.1, 1 - i * 0.013).toFixed(2);
+                const initialOpacity = Math.max(0.02, 0.7 - i * 0.01).toFixed(2);
+                particle.style.opacity = initialOpacity;
+                particle.style.transform = `scale(${scale})`;
+                particle.addEventListener('animationend', () => particle.remove(), { once: true });
+                container.appendChild(particle);
+                const delay = i * particleDelayIncrement;
+                requestAnimationFrame(() => {
+                    particle.style.offsetPath = pathInfo.pathString;
+                    particle.style.setProperty('--stop-percent', `${pathInfo.stopPercent}%`);
+                    particle.style.animationDelay = `${delay}ms`;
+                    particle.style.animationDuration = `${duration}ms`;
+                     requestAnimationFrame(() => particle.classList.add(particleAnimClass));
+                });
+            }
+        }
+
+
+        // --- Phase Logic Functions ---
+        function startFillingPhase() {
+            console.log("Starting Filling Phase...");
+            updateStatusText('Awaiting New Info', 'FILLING', false); // Initial text
+            if (continuousPulseColorIntervalId) clearInterval(continuousPulseColorIntervalId);
+            continuousPulseColorIntervalId = setInterval(() => {
+                if (dbElement) {
+                     const randomPulseColor = packetColors[Math.floor(Math.random() * packetColors.length)];
+                     dbElement.style.setProperty('--db-pulse-glow-color', randomPulseColor);
+                }
+            }, 600);
+            if (animationIntervalId) clearInterval(animationIntervalId);
+            animationIntervalId = setInterval(triggerInputPacketAnimation, triggerInterval);
+            console.log("Input packet interval started.");
+            // Ensure stream is hidden initially
+            stopDataStream(false);
+        }
+
+        // handlePacketArrival now only updates the meter and triggers ANALYSIS_TEXT on first packet
+        function handlePacketArrival(packetNumber) {
+            // Runs while currentState is FILLING or ANALYSIS_TEXT
+            if (currentState === 'FILLING' || currentState === 'ANALYSIS_TEXT') {
+                // console.log(`Input packet ${packetNumber} arrived at DB.`);
+                const progressPercent = Math.min(100, (packetNumber / packetsNeededToFill) * 100);
+                if(dbElement) {
+                    dbElement.style.setProperty('--meter-fill-percent', `${progressPercent}%`);
+                    dbElement.style.setProperty('--db-glow-color', lastPacketColor);
+                }
+
+                // --- Handle First Packet Arrival ---
+                if (packetNumber === 1 && currentState === 'FILLING') {
+                     console.log("First packet arrived. Changing state to ANALYSIS_TEXT.");
+                     changeState('ANALYSIS_TEXT'); // Change text/icon, start random stream
+                }
+
+                // --- Handle Last Packet Arrival (Meter Update Only) ---
+                if (packetNumber === packetsNeededToFill) {
+                     console.log(`Last packet (${packetNumber}) arrived. Meter visually full.`);
+                     // Ensure meter is visually 100%
+                     if(dbElement) dbElement.style.setProperty('--meter-fill-percent', `100%`);
+                     // NOTE: Transition to CONTENT_CREATION is now handled by the animationend callback of the last packet
+                }
+            }
+        }
+
+        function startContentCreationPhase() {
+            console.log("Starting Content Creation Phase...");
+            if (dbElement) {
+                dbElement.style.animationPlayState = 'paused'; // Stop pulsing
+                dbElement.style.boxShadow = 'none';
+            }
+            if (continuousPulseColorIntervalId) clearInterval(continuousPulseColorIntervalId);
+            continuousPulseColorIntervalId = null;
+            // stopDataStream(false); // Stop random stream (handled by ANALYSIS_TEXT exit)
+
+            if (calculatedOrbitPathData.length < 4) {
+                console.error("Orbit paths not calculated. Aborting content creation.");
+                changeState('RESETTING'); return;
+            }
+
+            // Start Orbiting Packets with different colors simultaneously
+            for (let i = 0; i < 4; i++) {
+                const orbitPathInfo = { pathString: calculatedOrbitPathData[i], stopPercent: 100 };
+                const color = packetColors[i % packetColors.length]; // Cycle through colors
+                // Start all orbits at once
+                 createAndAnimateVisualPacket(orbitPathInfo, color, contentPacketOrbitDuration, 'content-packet', 'content-packet-shadow', 'animate-content-packet-orbit', 'animate-orbit-particle', true);
+            }
+
+            // Start Typing Effect in Data Stream
+            startContentTypingEffect(mockTweetContent, contentTypingSpeed); // Use tweet content
+
+            // Set timeout to transition to APPROVAL after orbits complete
+            if (phaseTimeoutId) clearTimeout(phaseTimeoutId);
+             // Use the updated contentPacketOrbitDuration
+            phaseTimeoutId = setTimeout(() => {
+                if (currentState === 'CONTENT_CREATION') {
+                    if (contentTypingTimeoutId) clearTimeout(contentTypingTimeoutId); // Ensure typing stops
+                    changeState('APPROVAL');
+                }
+            }, contentPacketOrbitDuration + 500); // Wait for orbit + buffer
+        }
+        function startApprovalPhase() {
+            console.log("Starting Approval Phase...");
+            if (approvalCheckmark) {
+                approvalCheckmark.classList.remove('checkmark-animate'); // Remove previous animation if any
+                // Trigger reflow to restart animation if needed
+                void approvalCheckmark.offsetWidth;
+                approvalCheckmark.classList.add('checkmark-animate');
+            }
+            if (dataStreamContainer) dataStreamContainer.classList.add('stream-pulsing-green-overlay'); // Use new overlay class
+            if (dbElement) {
+                 // dbElement.style.animationPlayState = 'paused'; // REMOVED - Caused issues
+                 dbElement.classList.add('db-pulsing-green'); // Add green pulse class
+                 // FIX: Explicitly set animation to override default idle pulse
+                 dbElement.style.animation = 'db-approve-pulse 600ms infinite alternate ease-in-out';
+                 console.log("Applied db-pulsing-green class and inline animation style.");
+            }
+
+
+            if (phaseTimeoutId) clearTimeout(phaseTimeoutId);
+            phaseTimeoutId = setTimeout(() => {
+                // Checkmark removal and pulse stop handled by changeState exit logic
+                if (currentState === 'APPROVAL') {
+                    changeState('SENDING_SOCIAL');
+                }
+            }, approvalPhaseDuration);
+        }
+        function startSocialSendingPhase() {
+             console.log("Starting Social Sending (Publishing) Phase...");
+             // Meter should already be full
+             if (dbElement) {
+                dbElement.style.animationPlayState = 'paused'; // Ensure idle/green pulse is stopped
+                dbElement.style.boxShadow = 'none'; // Reset any pulse shadow
+             }
+             if (continuousPulseColorIntervalId) clearInterval(continuousPulseColorIntervalId);
+             continuousPulseColorIntervalId = null;
+
+             // FIX: Hide data stream immediately
+             stopDataStream(false);
+
+             if (contentTypingTimeoutId) clearTimeout(contentTypingTimeoutId);
+
+             // Show Internet Icon
+             if (cloudIcon) {
+                 cloudIcon.classList.add('visible');
+             }
+
+             const requiredPaths = ['twitter', 'facebook', 'linkedin', 'instagram']; // Updated
+             if (requiredPaths.some(type => !calculatedSocialPathData[type])) {
+                 console.error("Cannot send social icons, path calculation failed or incomplete.");
+                 changeState('RESETTING'); return;
+             }
+
+             socialIconsFinished = 0; // Reset counter
+
+             // Animate the 4 social icons
+             createAndAnimateSocialIcon('twitter', 0);
+             createAndAnimateSocialIcon('facebook', 150);
+             createAndAnimateSocialIcon('linkedin', 300);
+             createAndAnimateSocialIcon('instagram', 450);
+         }
+        function createAndAnimateSocialIcon(type, delay) {
+            const socialPacket = document.createElement('div');
+            socialPacket.classList.add('social-packet');
+            socialPacket.id = `${type}-packet`;
+            let logoSvg = '';
+            const logoIdMap = { twitter: 6, facebook: 8 }; // Only map existing HTML logos
+
+            // Special handling for LinkedIn and Instagram SVGs (embed directly)
+            if (type === 'linkedin') {
+                logoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>`;
+            } else if (type === 'instagram') {
+                logoSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>`;
+            } else {
+                // Fetch SVG from existing HTML elements for Twitter/Facebook
+                const logoElement = document.getElementById(`logo-${logoIdMap[type]}`);
+                if (logoElement && logoElement.querySelector('svg')) {
+                    logoSvg = logoElement.querySelector('svg').outerHTML;
+                } else {
+                    console.warn(`SVG not found for logo ${type}. Using fallback.`);
+                    logoSvg = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8z"/></svg>';
+                }
+            }
+
+            socialPacket.innerHTML = logoSvg;
+            socialPacket.style.opacity = '0';
+            socialPacket.style.transform = 'scale(0.8)';
+            socialPacket.addEventListener('animationend', handleSocialAnimationEnd, { once: true });
+            container.appendChild(socialPacket);
+            const pathString = calculatedSocialPathData[type];
+            if (!pathString) {
+                console.error(`Path string missing for social icon type: ${type}`);
+                socialPacket.remove(); return;
+            }
+            requestAnimationFrame(() => {
+                socialPacket.style.offsetPath = pathString;
+                socialPacket.style.animationDelay = `${delay}ms`;
+                socialPacket.style.animationDuration = `${socialAnimationDuration}ms`;
+                requestAnimationFrame(() => { socialPacket.classList.add('animate-social'); });
+            });
+        }
+        function handleSocialAnimationEnd(event) {
+            event.target.remove();
+            socialIconsFinished++;
+            console.log(`Social icon finished: ${socialIconsFinished} / 4`); // Now expecting 4
+            if (socialIconsFinished >= 4) { // Check for 4 icons
+                triggerCloudEffect();
+            }
+        }
+        function triggerCloudEffect() {
+            console.log("All social icons arrived, triggering cloud effect.");
+            if (!cloudIcon) return;
+            // Start cloud pulse effect first
+            cloudIcon.classList.add('cloud-pulsing');
+            if (cloudPulseColorIntervalId) clearInterval(cloudPulseColorIntervalId);
+            cloudPulseColorIntervalId = setInterval(() => {
+                const randomCloudColor = cloudPulseColors[Math.floor(Math.random() * cloudPulseColors.length)];
+                cloudIcon.style.setProperty('--cloud-glow-color', randomCloudColor);
+            }, 150);
+            // THEN change state to POSTED
+            changeState('POSTED'); // State changes, timeout for this phase is set in changeState
+        }
+        // New function for DB Pop effect
+        function triggerDbPopEffect() {
+            if (!dbElement) return;
+            console.log("Triggering DB pop effect.");
+            dbElement.classList.remove('db-pulsing-green'); // Ensure green pulse is off
+            dbElement.style.animation = 'none'; // Clear previous animations
+            requestAnimationFrame(() => { // Ensure style changes apply before adding class
+                 dbElement.classList.add('db-popping');
+                 // Remove class after animation duration
+                 setTimeout(() => {
+                     if (dbElement) dbElement.classList.remove('db-popping');
+                 }, dbPopDuration);
+            });
+        }
+         // New function for Confetti effect
+         function triggerConfettiEffect() {
+             if (!dbElement || !container) return;
+             console.log("Triggering Confetti effect.");
+             const dbRect = dbElement.getBoundingClientRect();
+             const containerRect = container.getBoundingClientRect(); // Get container bounds
+
+             // Calculate center relative to the main container
+             const centerX = (dbRect.left + dbRect.width / 2) - containerRect.left;
+             const centerY = (dbRect.top + dbRect.height / 2) - containerRect.top;
+
+             for (let i = 0; i < confettiParticleCount; i++) {
+                 const particle = document.createElement('div');
+                 particle.classList.add('confetti-particle');
+
+                 // Random color
+                 particle.style.backgroundColor = confettiColors[Math.floor(Math.random() * confettiColors.length)];
+
+                 // Initial position at center of DB
+                 particle.style.left = `${centerX}px`;
+                 particle.style.top = `${centerY}px`;
+
+                 // Calculate random destination and rotation
+                 const angle = Math.random() * Math.PI * 2; // Random angle
+                 // Reduced distance for smaller explosion
+                 const distance = Math.random() * (containerRect.width * 0.2) + (dbRect.width * 0.4);
+                 const endX = Math.cos(angle) * distance;
+                 const endY = Math.sin(angle) * distance + (distance * 0.3); // Add some downward drift
+                 const rotation = Math.random() * 720 - 360; // Random rotation
+
+                 container.appendChild(particle); // Append before starting animation
+
+                 // Apply animation class
+                 requestAnimationFrame(() => {
+                     // Set custom properties for the keyframe animation
+                     particle.style.setProperty('--confetti-x', `${endX}px`);
+                     particle.style.setProperty('--confetti-y', `${endY}px`);
+                     particle.style.setProperty('--confetti-rot', `${rotation}deg`);
+                     particle.classList.add('animate-confetti');
+                 });
+
+
+                 // Remove particle after animation
+                 setTimeout(() => {
+                     particle.remove();
+                 }, confettiDuration); // Match CSS animation duration
+             }
+         }
+
+        // --- Data Stream Functions ---
+        // Refined startDataStream
+        function startDataStream(useRandom = false) {
+            // Log element reference
+            console.log('startDataStream called. dataStreamContainer:', dataStreamContainer);
+            if (!dataStreamContainer || !dataStreamContent) {
+                 console.error("Data stream elements not found!");
+                 return;
+            }
+            console.log(`Starting data stream (random: ${useRandom}). Current display:`, window.getComputedStyle(dataStreamContainer).display);
+
+            // Reset state before applying new effects
+            console.log("Setting display: block"); // Removed !important for now
+            dataStreamContainer.style.setProperty('display', 'block'); // Force display
+            // Log computed style *after* setting it (might need slight delay)
+            requestAnimationFrame(() => {
+                console.log("Computed display after setting in startDataStream:", window.getComputedStyle(dataStreamContainer).display);
+            });
+
+            dataStreamContainer.classList.remove('stream-fading-out', 'stream-pulsing-green-overlay');
+            dataStreamContainer.style.opacity = '1';
+            dataStreamContent.innerHTML = '';
+            dataStreamContent.style.animation = 'none'; // Clear previous animations first
+
+            // Clear potentially running intervals from other stream types
+            if (dataStreamIntervalId) clearInterval(dataStreamIntervalId);
+            dataStreamIntervalId = null;
+            if (contentTypingTimeoutId) clearTimeout(contentTypingTimeoutId);
+            contentTypingTimeoutId = null;
+
+
+            if (useRandom) {
+                // Pre-fill some lines
+                let initialContent = [];
+                for(let i=0; i < 10; i++){ // Pre-fill ~10 lines
+                    initialContent.push(generateRandomHtmlLine());
+                }
+                dataStreamContent.innerHTML = initialContent.join('\n');
+
+                // Apply scrolling (with negative delay) and pulsing animations for random data
+                // Use requestAnimationFrame to ensure pre-filled content is rendered before animation starts
+                requestAnimationFrame(() => {
+                     dataStreamContent.style.animation = 'stream-scroll 0.15s -0.1s linear infinite, stream-pulse 1.5s ease-in-out infinite alternate'; // Added negative delay
+                });
+
+                // Start interval to add more lines
+                dataStreamIntervalId = setInterval(() => {
+                    let currentContent = dataStreamContent.innerHTML.split('\n');
+                    // Add fewer lines per interval now that it's pre-filled
+                    for(let i=0; i< Math.floor(Math.random() * 2) + 1; i++){
+                        currentContent.push(generateRandomHtmlLine());
+                    }
+                    if (currentContent.length > dataStreamMaxLines) {
+                        currentContent = currentContent.slice(currentContent.length - dataStreamMaxLines);
+                    }
+                    dataStreamContent.innerHTML = currentContent.join('\n');
+                }, dataStreamInterval);
+            } else {
+                 // Typing logic is handled by startContentTypingEffect, which calls this function first
+                 // No specific animation needed here for typing
+            }
+        }
+         // Refined stopDataStream
+        function stopDataStream(showTweet = false) {
+            // Clear intervals/timeouts related to any stream effect
+            if (dataStreamIntervalId) clearInterval(dataStreamIntervalId);
+            dataStreamIntervalId = null;
+            if (contentTypingTimeoutId) clearTimeout(contentTypingTimeoutId);
+            contentTypingTimeoutId = null;
+
+            if (!dataStreamContainer || !dataStreamContent) return;
+            console.log(`Stopping data stream effect (showTweet: ${showTweet}).`);
+
+            // Reset visual state regardless of showTweet flag initially
+            dataStreamContent.style.animation = 'none';
+            dataStreamContainer.classList.remove('stream-fading-out', 'stream-pulsing-green-overlay');
+            dataStreamContainer.style.opacity = '1'; // Reset opacity
+
+            if (showTweet) {
+                 // Display the final "published" message
+                 dataStreamContent.innerHTML = `<div style="border: 1px solid #4b5563; border-radius: 6px; padding: 6px; font-size: 0.65rem; background-color: #1a202c; color: #cbd5e1; text-align: left; white-space: normal;"> <div style="font-weight: bold; color: #e2e8f0;">AI Assistant ✨</div> <div style="margin-top: 3px;">Content published successfully! 🚀</div> </div>`;
+                 dataStreamContainer.style.setProperty('display', 'block'); // Ensure visible
+                 console.log("stopDataStream: Setting display: block (showTweet=true)");
+            } else {
+                 // Hide the container and clear content if not showing tweet
+                 dataStreamContainer.style.setProperty('display', 'none'); // Ensure hidden
+                 console.log("stopDataStream: Setting display: none (showTweet=false)");
+                 dataStreamContent.innerHTML = '';
+            }
+             requestAnimationFrame(() => {
+                console.log("stopDataStream: Computed display after setting:", window.getComputedStyle(dataStreamContainer).display);
+            });
+        }
+        function startContentTypingEffect(lines, speed) {
+             if (!dataStreamContainer || !dataStreamContent) return;
+             console.log("Starting content typing effect...");
+             startDataStream(false); // Ensure container is visible and random stream stopped
+
+             let lineIndex = 0;
+             let charIndex = 0;
+             if (contentTypingTimeoutId) clearTimeout(contentTypingTimeoutId);
+
+             function typeCharacter() {
+                 if (lineIndex < lines.length) {
+                     const currentLine = lines[lineIndex];
+                     if (charIndex < currentLine.length) {
+                         dataStreamContent.innerHTML += currentLine[charIndex];
+                         charIndex++;
+                         // Auto-scroll to bottom after adding character
+                         dataStreamContent.scrollTop = dataStreamContent.scrollHeight;
+                         contentTypingTimeoutId = setTimeout(typeCharacter, speed);
+                     } else {
+                         dataStreamContent.innerHTML += '\n';
+                         // Auto-scroll to bottom after adding newline
+                         dataStreamContent.scrollTop = dataStreamContent.scrollHeight;
+                         lineIndex++;
+                         charIndex = 0;
+                         contentTypingTimeoutId = setTimeout(typeCharacter, speed * 2); // Pause slightly longer for new lines
+                     }
+                 } else {
+                     console.log("Content typing finished.");
+                     contentTypingTimeoutId = null;
+                 }
+             }
+             typeCharacter();
+        }
+
+        // --- Reset Functions ---
+        function resetFullCycle() {
+            console.log("Executing full cycle reset...");
+            // Stop all intervals & timeouts
+            if (animationIntervalId) clearInterval(animationIntervalId); animationIntervalId = null;
+            if (continuousPulseColorIntervalId) clearInterval(continuousPulseColorIntervalId); continuousPulseColorIntervalId = null;
+            if (cloudPulseColorIntervalId) clearInterval(cloudPulseColorIntervalId); cloudPulseColorIntervalId = null;
+            if (phaseTimeoutId) clearTimeout(phaseTimeoutId); phaseTimeoutId = null; // Clear generic phase timeout
+            if (dbPulseStartTimeoutId) clearTimeout(dbPulseStartTimeoutId); dbPulseStartTimeoutId = null;
+            if (dataStreamIntervalId) clearInterval(dataStreamIntervalId); dataStreamIntervalId = null;
+            if (contentTypingTimeoutId) clearTimeout(contentTypingTimeoutId); contentTypingTimeoutId = null;
+
+            // Remove all transient elements
+            document.querySelectorAll('.data-packet, .data-packet-shadow, .particle, .social-packet, .content-packet, .confetti-particle').forEach(el => { // Added confetti
+                if (container.contains(el)) { el.remove(); }
+            });
+            orbitingPackets.length = 0;
+
+            resetCycleVisuals();
+
+            packetsReceived = 0;
+            socialIconsFinished = 0;
+            currentInputLogoIndex = -1;
+
+            changeState('FILLING'); // Start the next cycle
+        }
+        function resetCycleVisuals() {
+             if (cloudIcon) {
+                 // Hide cloud icon on reset
+                 cloudIcon.classList.remove('visible', 'cloud-pulsing');
+                 cloudIcon.style.removeProperty('--cloud-glow-color');
+             }
+             if (approvalCheckmark) approvalCheckmark.classList.remove('checkmark-animate'); // Remove animation class
+             stopDataStream(false); // Stops stream, removes classes, resets opacity
+             if(dbElement) {
+                 dbElement.style.setProperty('--meter-fill-percent', '0%');
+                 dbElement.style.removeProperty('--db-glow-color');
+                 dbElement.classList.remove('db-pulsing-green', 'db-popping'); // Remove specific state classes
+                 dbElement.style.animation = ''; // Clear specific animations like pop or green pulse
+                 // Re-apply idle pulse animation, but keep it paused
+                 dbElement.style.animation = 'db-idle-pulse 800ms infinite ease-in-out';
+                 dbElement.style.animationPlayState = 'paused';
+                 dbElement.style.boxShadow = ''; // Reset shadow
+             }
+             logoElements.forEach(logo => {
+                 if (logo) {
+                     logo.classList.remove('logo-active');
+                     logo.style.removeProperty('--logo-active-glow-color');
+                 }
+             });
+             updateDbIcon('FILLING');
+        }
+
+        // --- Event Listeners ---
+        const debouncedRecalculate = debounce(() => {
+             console.log("Resize detected, recalculating paths and resetting...");
+             changeState('RESETTING');
+             setTimeout(() => {
+                 calculateAllPaths();
+             }, 50);
+        }, 250);
+        window.addEventListener('resize', debouncedRecalculate);
+
+        // --- Initialization ---
+        let animationInitialized = false; // Flag to prevent multiple initializations
+        function initializeAnimation() {
+            if (animationInitialized) {
+                console.log("Animation already initialized.");
+                return;
+            }
+            animationInitialized = true;
+            console.log("Initializing animation...");
+            currentState = 'INITIALIZING';
+            updateStatusText('Initializing...', 'INITIALIZING'); // Set initial text via JS
+
+            // Set CSS variable for orbit duration
+            document.documentElement.style.setProperty('--content-creation-orbit-duration', `${contentPacketOrbitDuration}ms`);
+            document.documentElement.style.setProperty('--db-pop-duration', `${dbPopDuration}ms`);
+            document.documentElement.style.setProperty('--checkmark-anim-duration', `${checkmarkAnimDuration}ms`);
+            document.documentElement.style.setProperty('--confetti-duration', `${confettiDuration}ms`); // Set confetti duration var
+            console.log(`Packets to fill set to: ${packetsNeededToFill}`);
+
+            resetCycleVisuals();
+            calculateAllPaths();
+
+            // Clear intervals/timeouts
+            if (animationIntervalId) clearInterval(animationIntervalId); animationIntervalId = null;
+            if (continuousPulseColorIntervalId) clearInterval(continuousPulseColorIntervalId); continuousPulseColorIntervalId = null;
+            if (cloudPulseColorIntervalId) clearInterval(cloudPulseColorIntervalId); cloudPulseColorIntervalId = null;
+            if (phaseTimeoutId) clearTimeout(phaseTimeoutId); phaseTimeoutId = null; // Clear generic phase timeout
+            if (dbPulseStartTimeoutId) clearTimeout(dbPulseStartTimeoutId); dbPulseStartTimeoutId = null;
+            if (dataStreamIntervalId) clearInterval(dataStreamIntervalId); dataStreamIntervalId = null;
+            if (contentTypingTimeoutId) clearTimeout(contentTypingTimeoutId); contentTypingTimeoutId = null;
+
+            packetsReceived = 0;
+            socialIconsFinished = 0;
+            currentInputLogoIndex = -1;
+
+            console.log("Scheduling transition to FILLING state...");
+            setTimeout(() => {
+                 console.log("Timeout fired: Calling changeState('FILLING')");
+                 changeState('FILLING');
+            }, 50);
+        }
+        // Start animation only when container is visible
+        window.addEventListener('load', () => {
+             const animationContainer = document.getElementById('animationContainer');
+             if (!animationContainer) {
+                 console.error("Animation container not found!");
+                 return;
+             }
+
+             const observerCallback = (entries, observer) => {
+                 entries.forEach(entry => {
+                     if (entry.isIntersecting) {
+                         console.log("Animation container is visible, initializing animation.");
+                         initializeAnimation(); // Call the main init function
+                         observer.unobserve(entry.target); // Stop observing once it's visible
+                     }
+                 });
+             };
+
+             const observerOptions = {
+                 root: null, // Use the viewport
+                 rootMargin: '0px',
+                 threshold: 0.1 // Trigger when 10% is visible
+             };
+
+             const observer = new IntersectionObserver(observerCallback, observerOptions);
+             observer.observe(animationContainer);
+        });
+
+    </script>
+</body>
+</html>
